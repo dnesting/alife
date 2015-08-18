@@ -1,8 +1,11 @@
 package entities
 
+import "world"
+
 type Energetic interface {
 	Energy() int
 	AddEnergy(amt int) (int, int)
+	Consume(w world.World, x, y, amt int) int
 }
 
 type energy struct {
@@ -29,4 +32,9 @@ func (e *energy) AddEnergy(amt int) (int, int) {
 	}
 	e.v = nv
 	return amt, e.v
+}
+
+func (e *energy) Consume(w world.World, x, y, amt int) int {
+	act, _ := e.AddEnergy(-amt)
+	return act
 }
