@@ -1,73 +1,51 @@
 package org
 
-import "hash/crc32"
+import "bytes"
 import "fmt"
-import "math/rand"
 
 import "entities"
-import "world"
+import "math/rand"
+import "sim"
 
-type Organism struct {
+const MutateOnDivideProb = 0.01
+const BodyEnergy = 1000
+const SenseDistance = 10
+
+type SenseFilter func(o interface{}) float64
+
+type Mutable interface {
+	Mutate()
+}
+
+type Organism interface {
 	entities.Energetic
 
-	Genome uint32
+	Forward(s *sim.Sim)
 
-	Code []byte
-	cpu  *Cpu
-	dir  int
-	w    world.World
-	x, y int
+	SetDir(dir int)
+	Right()
+	Left()
+
+	Neighbor(s *sim.Sim) interface{}
+	Divide(s *sim.Sim, frac float32, n Organism, b *BaseOrganism)
+	Sense(s *sim.Sim, fn SenseFilter) float64
+	Die(s *sim.Sim, n Organism, reason string)
+	EatNeighbor(s *sim.Sim, amt int)
 }
 
-func (o *Organism) String() string {
-	return fmt.Sprintf("[org (%d,%d) e=%d g=%d %v]", o.x, o.y, o.Energy(), o.Genome, o.cpu)
+type BaseOrganism struct {
+	entities.Battery
+	Dir  int
+	X, Y int
 }
 
-var runes string = "abcdefhijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-func (o *Organism) Rune() rune {
-	return rune(runes[int(o.Genome)%len(runes)])
-}
-
-func Random() *Organism {
-	o := New()
-	o.SetCode(RandomBytecode())
-	o.dir = rand.Intn(8)
-	return o
-}
-
-func New() *Organism {
-	return &Organism{
-		Energetic: entities.Energy(0),
-		cpu:       NewCpu(),
-	}
-}
-
-func NewFrom(o *Organism) *Organism {
-	return &Organism{
-		Energetic: entities.Energy(0),
-		cpu:       NewCpuFrom(o.cpu),
-		w:         o.w,
-		x:         o.x,
-		y:         o.y,
-	}
-}
-
-func (o *Organism) SetCode(data []byte) (orig []byte) {
-	orig = o.Code
-	o.Code = data
-	o.cpu.SetCode(data)
-	o.Genome = crc32.ChecksumIEEE(data)
-	return
-}
-
-func (o *Organism) Step(w world.World, x, y int) {
-	o.w = w
-	o.x = x
-	o.y = y
-	if err := o.cpu.Step(o); err != nil {
-		o.Die(err.Error())
-	}
+func (o *BaseOrganism) String() string {
+	var b bytes.Buffer
+	b.WriteString(fmt.Sprintf("[baseorg (%d,%d) ", o.X, o.Y))
+	b.WriteString(fmt.Sprintf("energy=%d", o.Energy()))
+	b.WriteString(fmt.Sprintf(" dir=%d", o.Dir))
+	b.WriteString("]")
+	return b.String()
 }
 
 func resolveDir(x, y, dir, dist int) (int, int) {
@@ -93,73 +71,95 @@ func resolveDir(x, y, dir, dist int) (int, int) {
 	}
 }
 
-func (o *Organism) Forward() error {
-	x, y := resolveDir(o.x, o.y, o.dir, 1)
-	o.w.MoveIfEmpty(o.x, o.y, x, y)
-	return nil
+func (o *BaseOrganism) PlaceRandomly(s *sim.Sim, n Organism) {
+	o.X, o.Y = s.World.PlaceRandomly(n)
 }
 
-func (o *Organism) Right() {
-	o.dir = (o.dir + 1) % 7
-}
-
-func (o *Organism) Left() {
-	if o.dir == 0 {
-		o.dir = 7
-	} else {
-		o.dir--
+func (o *BaseOrganism) Forward(s *sim.Sim) {
+	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
+	if s.World.MoveIfEmpty(o.X, o.Y, x, y) == nil {
+		o.X = x
+		o.Y = y
 	}
 }
 
-func (o *Organism) Neighbor() (interface{}, int, int) {
-	x, y := resolveDir(o.x, o.y, o.dir, 1)
-	return o.w.At(x, y), x, y
+func (o *BaseOrganism) Right() {
+	o.Dir = (o.Dir + 1) % 7
 }
 
-func (o *Organism) Divide(frac float32) {
-	frac = 0.5
-	n := NewFrom(o)
-	n.SetCode(o.cpu.Mutated())
-	n.dir = rand.Intn(8)
-	x, y := resolveDir(o.x, o.y, o.dir, 1)
-	if o.w.PutIfEmpty(x, y, n) == nil {
+func (o *BaseOrganism) Left() {
+	if o.Dir == 0 {
+		o.Dir = 7
+	} else {
+		o.Dir--
+	}
+}
+
+func (o *BaseOrganism) Neighbor(s *sim.Sim) interface{} {
+	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
+	return s.World.At(x, y)
+}
+
+func (o *BaseOrganism) SetDir(dir int) {
+	o.Dir = dir
+}
+
+func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrganism) {
+	nb.Dir = rand.Intn(8)
+
+	if m, ok := no.(Mutable); ok {
+		if rand.Float32() < MutateOnDivideProb {
+			m.Mutate()
+		}
+	}
+
+	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
+	if s.World.PutIfEmpty(x, y, no) == nil {
 		amt, e := o.AddEnergy(-BodyEnergy)
 		if e == 0 {
-			o.w.Put(x, y, entities.NewFood(-amt))
+			s.World.Put(x, y, entities.NewFood(-amt))
 		} else {
 			amt = -int((1.0 - frac) * float32(o.Energy()))
 			amt, _ = o.AddEnergy(amt)
-			n.AddEnergy(-amt)
-			n.x = x
-			n.y = y
+			no.AddEnergy(-amt)
+			nb.X = x
+			nb.Y = y
+			if nr, ok := no.(sim.Runnable); ok {
+				s.Start(nr)
+			}
 		}
 	}
 	return
 }
 
-const SenseDistance = 10
-
-func (o *Organism) Sense(ignoreSameGenome bool) int {
-	result := 0
+func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
+	result := 0.0
 	for dist := 1; dist <= SenseDistance; dist++ {
-		x, y := resolveDir(o.x, o.y, o.dir, dist)
-		if occ := o.w.At(x, y); occ != nil {
-			erg := 0
-			if e, ok := occ.(Organism); ok && ignoreSameGenome {
-				if e.Genome != o.Genome {
-					erg = e.Energy()
+		x, y := resolveDir(o.X, o.Y, o.Dir, dist)
+		if occ := s.World.At(x, y); occ != nil {
+			if e, ok := occ.(entities.Energetic); ok {
+				mult := 1.0
+				if filterFn != nil {
+					mult = filterFn(occ)
 				}
-			} else if e, ok := occ.(entities.Energetic); ok {
-				erg = e.Energy()
+				result += float64(e.Energy()) * mult * (1.0 / float64(dist))
 			}
-			result += int(float32(erg) * (1.0 / float32(dist)))
 		}
 	}
 	return result
 }
 
-const BodyEnergy = 500
+func (o *BaseOrganism) Die(s *sim.Sim, n Organism, reason string) {
+	s.World.Put(o.X, o.Y, entities.NewFood(o.Energy()+BodyEnergy))
+	//fmt.Printf("%v (%v) dying: %s\n", o, x, reason)
+}
 
-func (o *Organism) Die(reason string) {
-	o.w.ReplaceIfEqual(o.x, o.y, o, entities.NewFood(o.Energy()+BodyEnergy))
+func (o *BaseOrganism) EatNeighbor(s *sim.Sim, amt int) {
+	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
+	if n := s.World.At(x, y); n != nil {
+		if e, ok := n.(entities.Energetic); ok {
+			act := e.Consume(s.World, x, y, amt)
+			o.AddEnergy(act)
+		}
+	}
 }

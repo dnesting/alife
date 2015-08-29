@@ -1,60 +1,70 @@
 package sim
 
-import "errors"
 import "sync"
+import "time"
 
-//import "entities"
+import "entities/census"
 import "world"
 
 type Sim struct {
-	World world.World
+	World  world.World
+	Census *census.DirCensus
+
+	mu   sync.RWMutex
+	wg   sync.WaitGroup
+	stop bool
 }
 
-type Steppable interface {
-	Step(w world.World, x, y int)
+func NewSim(w world.World) *Sim {
+	return &Sim{
+		World: w,
+	}
 }
 
-type StepCallback func(w world.World) error
+func (s *Sim) StopAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-var StopRunning = errors.New("simulation complete")
-var NothingToExecute = errors.New("nothing in the world to execute")
+	s.stop = true
+}
 
-func (s *Sim) Step(cb StepCallback) error {
-	var steppers []func()
+func (s *Sim) IsStopped() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
+	return s.stop
+}
+
+type Runnable interface {
+	Run(s *Sim)
+}
+
+func (s *Sim) Time() int64 {
+	return time.Now().UnixNano()
+}
+
+func (s *Sim) Start(st Runnable) {
+	s.wg.Add(1)
+	if g, ok := st.(census.Genomer); ok {
+		s.Census.Add(s.Time(), g.Genome())
+	}
+	go func() {
+		defer s.wg.Done()
+		if g, ok := st.(census.Genomer); ok {
+			defer func() {
+				s.Census.Remove(s.Time(), g.Genome())
+			}()
+		}
+		st.Run(s)
+	}()
+}
+
+func (s *Sim) Run() {
+	s.stop = false
 	s.World.Each(func(x, y int, o world.Occupant) {
-		if st, ok := o.(Steppable); ok {
-			steppers = append(steppers, func() {
-				st.Step(s.World, x, y)
-			})
+		if st, ok := o.(Runnable); ok {
+			s.Start(st)
 		}
 	})
-
-	var wg sync.WaitGroup
-	for _, fn := range steppers {
-		fn := fn
-		wg.Add(1)
-		go func() {
-			fn()
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-
-	if len(steppers) == 0 {
-		return NothingToExecute
-	}
-
-	return cb(s.World)
-}
-
-func (s *Sim) Run(fn StepCallback) error {
-	for {
-		if e := s.Step(fn); e != nil {
-			if e == StopRunning {
-				return nil
-			}
-			return e
-		}
-	}
+	s.wg.Wait()
 }

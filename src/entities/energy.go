@@ -1,5 +1,7 @@
 package entities
 
+import "fmt"
+
 import "world"
 
 type Energetic interface {
@@ -8,33 +10,30 @@ type Energetic interface {
 	Consume(w world.World, x, y, amt int) int
 }
 
-type energy struct {
-	v int
+type Battery struct {
+	V int
 }
 
-func Energy(v int) Energetic {
-	if v < 0 {
-		v = 0
-	}
-	return &energy{v}
+func (e *Battery) String() string {
+	return fmt.Sprintf("[battery %d]", e.V)
 }
 
-func (e *energy) Energy() int {
-	return e.v
+func (e *Battery) Energy() int {
+	return e.V
 }
 
-func (e *energy) AddEnergy(amt int) (int, int) {
-	v := e.v + amt
+func (e *Battery) AddEnergy(amt int) (int, int) {
+	v := e.V + amt
 	nv := v
 	if nv < 0 {
 		nv = 0
 		amt -= v
 	}
-	e.v = nv
-	return amt, e.v
+	e.V = nv
+	return amt, e.V
 }
 
-func (e *energy) Consume(w world.World, x, y, amt int) int {
+func (e *Battery) Consume(w world.World, x, y, amt int) int {
 	act, _ := e.AddEnergy(-amt)
-	return act
+	return -act
 }
