@@ -1,5 +1,7 @@
 # goalife
 
+[![GoDoc](https://godoc.org/github.com/dnesting/alife/goalife?status.svg)](https://godoc.org/github.com/dnesting/alife/goalife)
+
 The general idea is that you instantiate some sort of data structure representing a digital world, populate it with randomly-generated computer programs that have the ability to interact with the world, including the ability to reproduce, and throw in random mutations.  Eventually one of those randomly-generated organisms will spontaneously develop the ability to consume energy in the local environment, move and reproduce.  Eventually that organism will discover the ability to sense for energy and optimize its movements until eventually the programs become eerily like actual organisms running around the display.
 
 ## Running
