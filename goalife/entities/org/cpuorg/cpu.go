@@ -8,8 +8,8 @@ import "hash/crc32"
 import "math"
 import "math/rand"
 
-import "entities/org"
-import "sim"
+import "github.com/dnesting/alife/goalife/entities/org"
+import "github.com/dnesting/alife/goalife/sim"
 
 // Cpu is a simple 8-bit CPU with 4 registers.
 type Cpu struct {

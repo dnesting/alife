@@ -6,10 +6,11 @@ The general idea is that you instantiate some sort of data structure representin
 
 This requires Go 1.4 or later.
 
-    git clone https://github.com/dnesting/alife
-    cd alife/goalife/src
-    . env.sh
-    GOMAXPROCS=10 go run main.go
+    mkdir workspace; cd workspace
+    export GOPATH=$PWD
+
+    go get github.com/dnesting/alife/goalife
+    GOMAXPROCS=10 go run github.com/dnesting/alife/goalife/main.go
 
 You may need to widen your terminal to at least 200x55 characters.
 

@@ -2,7 +2,7 @@ package entities
 
 import "fmt"
 
-import "world"
+import "github.com/dnesting/alife/goalife/world"
 
 // Energetic describes types that have some notion of stored energy.
 // The energy level should never drop below zero.

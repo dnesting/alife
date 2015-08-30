@@ -3,10 +3,10 @@ package org
 
 import "bytes"
 import "fmt"
-
-import "entities"
 import "math/rand"
-import "sim"
+
+import "github.com/dnesting/alife/goalife/entities"
+import "github.com/dnesting/alife/goalife/sim"
 
 // MutateOnDivideProb is the probability that Mutate() will be invoked on a Mutable
 // that is the product of a Divide() operation.

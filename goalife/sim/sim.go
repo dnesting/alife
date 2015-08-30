@@ -4,8 +4,8 @@ package sim
 import "sync"
 import "time"
 
-import "entities/census"
-import "world"
+import "github.com/dnesting/alife/goalife/entities/census"
+import "github.com/dnesting/alife/goalife/world"
 
 // Sim encapsulates a world, a census and performs the Run operation on the
 // runnable entities within the world.

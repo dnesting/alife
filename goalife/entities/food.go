@@ -2,7 +2,7 @@ package entities
 
 import "fmt"
 
-import "world"
+import "github.com/dnesting/alife/goalife/world"
 
 // Food is a type of battery that, when its energy drops to zero, is removed from the world.
 type Food struct {

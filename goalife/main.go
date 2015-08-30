@@ -10,17 +10,17 @@ package main
 import "encoding/gob"
 import "fmt"
 import "io/ioutil"
+import "math/rand"
 import "os"
 import "path"
-
-import "entities"
-import "entities/org/cpuorg"
-import "entities/census"
-import "math/rand"
-import "sim"
 import "sync"
 import "time"
-import "world"
+
+import "github.com/dnesting/alife/goalife/entities"
+import "github.com/dnesting/alife/goalife/entities/org/cpuorg"
+import "github.com/dnesting/alife/goalife/entities/census"
+import "github.com/dnesting/alife/goalife/sim"
+import "github.com/dnesting/alife/goalife/world"
 
 // syncUpdate synchronizes an organism's execution until its last
 // operation gets rendered. This greatly slows execution, but allows

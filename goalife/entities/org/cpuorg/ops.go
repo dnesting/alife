@@ -3,8 +3,8 @@ package cpuorg
 import "bytes"
 import "math/rand"
 
-import "entities/org"
-import "sim"
+import "github.com/dnesting/alife/goalife/entities/org"
+import "github.com/dnesting/alife/goalife/sim"
 
 // Op represents a single named instruction.
 type Op struct {

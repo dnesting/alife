@@ -6,9 +6,9 @@ import "fmt"
 import "hash/crc32"
 import "math/rand"
 
-import "entities/census"
-import "entities/org"
-import "sim"
+import "github.com/dnesting/alife/goalife/entities/census"
+import "github.com/dnesting/alife/goalife/entities/org"
+import "github.com/dnesting/alife/goalife/sim"
 
 // CpuOrganism is an Organism that executes operations using a CPU.
 type CpuOrganism struct {
