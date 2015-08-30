@@ -40,7 +40,7 @@ const initialEnergy = 20000
 
 // fractionFromHistory controls how often our randomly-generated organism
 // is actually just something we pull out of the census history.
-const fractionFromHistory = 0.0
+const fractionFromHistory = 0.01
 
 // refreshHz controls the rate at which we will attempt to re-render
 // the world in the terminal.
@@ -80,76 +80,14 @@ func resurrectOrg(s *sim.Sim) {
 	s.Start(o)
 }
 
-func getProgram() []string {
-	if rand.Float32() < 0.5 {
-		return []string{
-			"L1",
-			"Zero",
-			"Shl1",
-			"Shl1",
-			"Shl1",
-			"Shl1",
-			"Shl1",
-			"SwapAC",
-			"L2",
-			"Forward",
-			"Eat",
-			"Eat",
-			"Eat",
-			"Eat",
-			"IfLoop",
-			"JumpR2",
-			"Left",
-			"Divide",
-			"Right",
-			"JumpR1",
-		}
-	} else {
-		return []string{
-			"L1",
-			"Zero",
-			"Shl1",
-			"Shl1",
-			"Shl1",
-			"Shl1",
-			"SwapAC",
-
-			"L2",
-			"Sense",
-			"IfZ",
-			"Jump3",
-			"Jump4",
-
-			"L3",
-			"SwapAC",
-			"IfZ",
-			"JumpR1",
-			"Dec",
-			"SwapAC",
-
-			"Left",
-			"JumpR2",
-
-			"L4",
-			"Forward",
-			"Forward",
-			"Forward",
-			"Eat",
-			"Eat",
-			"Left",
-			"Divide",
-
-			"JumpR1",
+func ensureMinimumOrgs(s *sim.Sim, count int) {
+	for i := count; i < ensureOrgs; i++ {
+		if rand.Float32() < fractionFromHistory {
+			resurrectOrg(s)
+		} else {
+			putRandomOrg(s)
 		}
 	}
-}
-
-func putOrg(s *sim.Sim) {
-	o := cpuorg.FromCode(getProgram())
-	o.AddEnergy(initialEnergy)
-	o.Mutate()
-	o.PlaceRandomly(s, o)
-	s.Start(o)
 }
 
 func main() {
@@ -186,13 +124,7 @@ func main() {
 	// Use a Census instance to track the evolution of "genomes" over time.
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
 	s.Census.OnChange(func(b census.Census, _ *census.Cohort, _ bool) {
-		// Use this opportunity to ensure we have our minimum number of
-		// organisms.  In practice this gets called recursively until the
-		// minimum condition is met, since each new organism
-		// placement triggers a census update.
-		if b.Count() < ensureOrgs {
-			putRandomOrg(s)
-		}
+		ensureMinimumOrgs(s, b.Count())
 	})
 
 	// Just for fun
