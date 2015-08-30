@@ -13,7 +13,7 @@ type Energetic interface {
 }
 
 // Battery is a simple implementation of Energetic that just stores a
-// count of available energy.
+// count of available energy. Its value must never be set below zero.
 type Battery struct {
 	V int
 }
