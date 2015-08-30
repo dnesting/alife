@@ -13,8 +13,7 @@ import "path"
 import "math/rand"
 import "sync"
 
-// Genomer is anything that can provide a genome. This is not used directly in this
-// package and may be removed later.
+// Genomer is anything that can provide a genome.
 type Genomer interface {
 	Genome() Genome
 }
@@ -30,9 +29,9 @@ type Genome interface {
 // Cohort describes the presence of a species in a world.
 type Cohort struct {
 	Genome Genome
-	Count  int
-	First  int64
-	Last   int64
+	Count  int   // population of this cohort
+	First  int64 // first time the genome was seen in the world
+	Last   int64 // last time the genome was seen in this world
 }
 
 func (c *Cohort) String() string {
