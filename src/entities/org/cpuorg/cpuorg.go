@@ -1,3 +1,5 @@
+// Package cpuorg contains an implementation of an Organism that executes operations
+// using a virtual CPU.
 package cpuorg
 
 import "fmt"
@@ -8,11 +10,13 @@ import "entities/census"
 import "entities/org"
 import "sim"
 
+// CpuOrganism is an Organism that executes operations using a CPU.
 type CpuOrganism struct {
 	org.BaseOrganism
 	Cpu Cpu
 }
 
+// CpuOrgGenome represents a census.Genome derived from the CpuOrgGenome's code.
 type CpuOrgGenome struct {
 	hash       uint32
 	code       []byte
@@ -37,16 +41,20 @@ func (o *CpuOrganism) String() string {
 	return fmt.Sprintf("[org (%d,%d) e=%d g=%d %v]", o.X, o.Y, o.Energy(), o.Cpu.Genome(), &o.Cpu)
 }
 
+// Genome returns a census.Genome corresponding to this organism.
 func (o *CpuOrganism) Genome() census.Genome {
 	return CpuOrgGenome{code: o.Cpu.Code}
 }
 
 var runes string = "abcdefhijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+// Rune contains the rendering of this genome for the terminal, using alphanumeric characters
+// tied to the organism's genome.
 func (o *CpuOrganism) Rune() rune {
 	return rune(runes[int(o.Cpu.Genome())%len(runes)])
 }
 
+// Random creates a randomly-generated organism, with random instructions and direction.
 func Random() *CpuOrganism {
 	o := &CpuOrganism{}
 	o.Cpu.SetCode(RandomBytecode())
@@ -54,6 +62,7 @@ func Random() *CpuOrganism {
 	return o
 }
 
+// FromCode creates a new organism with the provided symbolic code and a random direction.
 func FromCode(code []string) *CpuOrganism {
 	o := &CpuOrganism{}
 	o.Cpu.SetCode(Compile(code))
@@ -61,6 +70,9 @@ func FromCode(code []string) *CpuOrganism {
 	return o
 }
 
+// Step executes a single CPU instruction. Any error occurring during execution of the
+// instruction will be returned, at which point the organism is not expected to continue
+// executing.
 func (o *CpuOrganism) Step(s *sim.Sim) error {
 	if err := o.Cpu.Step(s, o); err != nil {
 		return err
@@ -68,10 +80,14 @@ func (o *CpuOrganism) Step(s *sim.Sim) error {
 	return nil
 }
 
+// Mutate mutates the CPU code of this organism.
 func (o *CpuOrganism) Mutate() {
 	o.Cpu.Mutate()
 }
 
+// Run continuously executes CPU instructions until the simulation is stopped.
+// If an error occurs executing an instruction, the organism is killed and execution
+// halted.
 func (o *CpuOrganism) Run(s *sim.Sim) {
 	for !s.IsStopped() {
 		if err := o.Step(s); err != nil {

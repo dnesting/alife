@@ -1,3 +1,4 @@
+// Package world defines the world within which organisms and other occupants will exist.
 package world
 
 import "bytes"
@@ -5,11 +6,14 @@ import "encoding/gob"
 import "math/rand"
 import "sync"
 
+// Occupant is anything that occupies a cell in a world.
 type Occupant interface{}
 
+// World is a place within which occupants can exist.  It contains various functions for
+// retrieving and manipulating items by their (x, y) coordinates.
 type World interface {
-	ConsiderEmpty(func(o Occupant) bool)
 	At(x, y int) Occupant
+
 	Put(x, y int, o Occupant) Occupant
 	PutIfEmpty(x, y int, o Occupant) Occupant
 	PlaceRandomly(o Occupant) (int, int)
@@ -17,12 +21,17 @@ type World interface {
 	RemoveIfEqual(x, y int, o Occupant) Occupant
 	ReplaceIfEqual(x, y int, o, n Occupant) Occupant
 	MoveIfEmpty(x1, y1, x2, y2 int) Occupant
-	Copy() World
+
 	Each(fn func(x, y int, o Occupant))
+
 	Dimensions() (int, int)
+
+	ConsiderEmpty(func(o Occupant) bool)
 	OnUpdate(fn func(w World))
+	Copy() World
 }
 
+// BasicWorld is an implementation of toroidal world backed by an internal slice.
 type BasicWorld struct {
 	Height, Width int
 
@@ -64,10 +73,18 @@ func (w *BasicWorld) GobDecode(stream []byte) error {
 	return nil
 }
 
+// ConsiderEmpty allows the caller to specify a function used to determine if
+// a cell is "sufficiently empty" for the purposes of the IfEmpty functions.
+// This permits, for instance, placement of new organisms on top of food
+// pellets, while not permitting movement of organisms into the same cells.
+// The function should return true if the occupant of the cell can be
+// considered empty enough.
 func (w *BasicWorld) ConsiderEmpty(fn func(o Occupant) bool) {
 	w.emptyFn = fn
 }
 
+// OnUpdate specifies a func to be called every time a change to the world
+// occurs. Changes include placement, removal, or movement of an occupant.
 func (w *BasicWorld) OnUpdate(fn func(w World)) {
 	w.updateFn = fn
 }
@@ -82,7 +99,7 @@ func (w *BasicWorld) isEmpty(o Occupant) bool {
 	return w.emptyFn(o)
 }
 
-func clip(v, max int) int {
+func modPos(v, max int) int {
 	v %= max
 	if v < 0 {
 		v += max
@@ -90,12 +107,16 @@ func clip(v, max int) int {
 	return v
 }
 
+// Dimensions gives the width and height dimensions of the world.
 func (w *BasicWorld) Dimensions() (int, int) {
 	return w.Width, w.Height
 }
 
+// offset converts the (x, y) coordinates to a slice offset.  The given
+// coordinates can be outside of the (width, height) ranges for the world,
+// which will just result in the location wrapping around.
 func (w *BasicWorld) offset(x, y int) int {
-	return clip(y*w.Width+x, w.Height*w.Width)
+	return modPos(y*w.Width+x, w.Height*w.Width)
 }
 
 func (w *BasicWorld) notifyUpdate() {
@@ -104,6 +125,9 @@ func (w *BasicWorld) notifyUpdate() {
 	}
 }
 
+// At returns the occupant at the given (x, y) coordinate.  Concurrent
+// execution may mean that the occupant has moved by the time its value
+// has been returned.
 func (w *BasicWorld) At(x, y int) Occupant {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -111,6 +135,8 @@ func (w *BasicWorld) At(x, y int) Occupant {
 	return w.data[w.offset(x, y)]
 }
 
+// Put places an occupant (or nil) in a cell, unconditionally.  The
+// existing occupant, if any, is returned.
 func (w *BasicWorld) Put(x, y int, o Occupant) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
@@ -122,6 +148,10 @@ func (w *BasicWorld) Put(x, y int, o Occupant) Occupant {
 	return old
 }
 
+// PlaceRandomly places an occupant in a random location, and returns
+// the (x, y) coordinates where it was placed.  The occupant will not
+// be placed in a cell that's already occupied, unless the existing
+// occupant is considered "empty" by the ConsiderEmpty callback.
 func (w *BasicWorld) PlaceRandomly(o Occupant) (int, int) {
 	width, height := w.Dimensions()
 	var x, y int
@@ -134,6 +164,8 @@ func (w *BasicWorld) PlaceRandomly(o Occupant) (int, int) {
 	return x, y
 }
 
+// PutIfEmpty places an occupant in a given location, but only if the
+// location is empty, or considered "empty" by the ConsiderEmpty callback.
 func (w *BasicWorld) PutIfEmpty(x, y int, o Occupant) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
@@ -147,6 +179,9 @@ func (w *BasicWorld) PutIfEmpty(x, y int, o Occupant) Occupant {
 	return w.data[offset]
 }
 
+// MoveIfEmpty moves the occupant at (x1, y1) into the location (x2, y2),
+// but only if the location is empty, or considered "empty" by the
+// ConsiderEmpty callback.
 func (w *BasicWorld) MoveIfEmpty(x1, y1, x2, y2 int) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
@@ -168,10 +203,16 @@ func (w *BasicWorld) MoveIfEmpty(x1, y1, x2, y2 int) Occupant {
 	return nil
 }
 
+// RemoveIfEqual removes the given occupant from the given (x, y) coordinates.
+// The occupant is only removed if the occupant at (x, y) is the same as the
+// one passed.
 func (w *BasicWorld) RemoveIfEqual(x, y int, o Occupant) Occupant {
 	return w.ReplaceIfEqual(x, y, o, nil)
 }
 
+// ReplaceIfEqual removes the given occupant o from the given (x, y) coordinates,
+// and replaces it with the given occupant n (which may be nil). Replacement only
+// occurs if the occupant at (x, y) is the same as o.
 func (w *BasicWorld) ReplaceIfEqual(x, y int, o Occupant, n Occupant) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
@@ -185,10 +226,12 @@ func (w *BasicWorld) ReplaceIfEqual(x, y int, o Occupant, n Occupant) Occupant {
 	return orig
 }
 
+// Remove removes the occupant at (x, y), and returns it.
 func (w *BasicWorld) Remove(x, y int) Occupant {
 	return w.Put(x, y, nil)
 }
 
+// Copy returns a shallow copy of the world.
 func (w *BasicWorld) Copy() World {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -204,6 +247,7 @@ func (w *BasicWorld) Copy() World {
 	}
 }
 
+// Each runs the given fn on each occupant in the world.
 func (w *BasicWorld) Each(fn func(x, y int, o Occupant)) {
 	for y := 0; y < w.Height; y++ {
 		for x := 0; x < w.Width; x++ {
@@ -214,6 +258,8 @@ func (w *BasicWorld) Each(fn func(x, y int, o Occupant)) {
 	}
 }
 
+// Printable is implemented by occupants that want to control how they are
+// presented on terminal-based renderings of the world.
 type Printable interface {
 	Rune() rune
 }
@@ -253,6 +299,7 @@ func (w *BasicWorld) String() string {
 	return b.String()
 }
 
+// New creates a World with the given dimensions.
 func New(h, w int) World {
 	return &BasicWorld{
 		Height: h,

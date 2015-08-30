@@ -1,3 +1,4 @@
+// Package sim encapsulates most aspects of running a simulation.
 package sim
 
 import "sync"
@@ -6,6 +7,8 @@ import "time"
 import "entities/census"
 import "world"
 
+// Sim encapsulates a world, a census and performs the Run operation on the
+// runnable entities within the world.
 type Sim struct {
 	World  world.World
 	Census *census.DirCensus
@@ -15,12 +18,15 @@ type Sim struct {
 	stop bool
 }
 
+// NewSim creates a new Sim with the given world.
 func NewSim(w world.World) *Sim {
 	return &Sim{
 		World: w,
 	}
 }
 
+// StopAll sets a flag that will result in subsequent invocations of
+// IsStopped to return true.
 func (s *Sim) StopAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,6 +34,7 @@ func (s *Sim) StopAll() {
 	s.stop = true
 }
 
+// IsStopped returns true if StopAll was invoked.
 func (s *Sim) IsStopped() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -35,14 +42,18 @@ func (s *Sim) IsStopped() bool {
 	return s.stop
 }
 
+// Runnable represents a world occupant that is capable of doing something.
 type Runnable interface {
 	Run(s *Sim)
 }
 
+// Time returns some int64 value representing the progress of time.  This could
+// be associated with a clock, or might just be an incrementing counter.
 func (s *Sim) Time() int64 {
 	return time.Now().UnixNano()
 }
 
+// Start begins executing the given Runnable, updating the Census as needed.
 func (s *Sim) Start(st Runnable) {
 	s.wg.Add(1)
 	if g, ok := st.(census.Genomer); ok {
@@ -59,6 +70,10 @@ func (s *Sim) Start(st Runnable) {
 	}()
 }
 
+// Run begins executing all Runnable items within the world.  This function
+// returns when there are no Runnable items executing anymore.  This implies
+// that the world must be seeded with one or more Runnable items before Run
+// will be effective.
 func (s *Sim) Run() {
 	s.stop = false
 	s.World.Each(func(x, y int, o world.Occupant) {

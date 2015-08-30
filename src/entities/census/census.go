@@ -1,3 +1,8 @@
+// Package census implements a method for tracking genomes.
+//
+// A Genome consists of (a) an identifying uint32 hash and (b) a []string
+// describing the full contents of the genome.  The meaning and derivation
+// of these two items is implementation-dependent.
 package census
 
 import "bufio"
@@ -8,15 +13,21 @@ import "path"
 import "math/rand"
 import "sync"
 
+// Genomer is anything that can provide a genome. This is not used directly in this
+// package and may be removed later.
 type Genomer interface {
 	Genome() Genome
 }
 
+// Genome is a type that describes what makes an organism "genetically distinct". It
+// consists of a uint32 hash and a []string describing the genome.  The meaning of
+// these is implementation-defined.
 type Genome interface {
 	Hash() uint32
 	Code() []string
 }
 
+// Cohort describes the presence of a species in a world.
 type Cohort struct {
 	Genome Genome
 	Count  int
@@ -28,18 +39,21 @@ func (c *Cohort) String() string {
 	return fmt.Sprintf("[cohort %d count=%d (%d-%d)]", c.Genome.Hash(), c.Count, c.First, c.Last)
 }
 
+// OnChangeCallback is a type used to communicate changes to the Census.
 type OnChangeCallback func(b Census, c *Cohort, added bool)
 
+// Census is a type that is used to track changes in a world, grouped by Genome.
 type Census interface {
 	Add(when int64, genome Genome) *Cohort
 	Remove(when int64, genome Genome) *Cohort
 	Count() int
-	Distinct() int
 	CountAllTime() int
+	Distinct() int
 	DistinctAllTime() int
 	OnChange(fn OnChangeCallback)
 }
 
+// MemCensus implements a Census entirely in-memory.
 type MemCensus struct {
 	mu          sync.RWMutex
 	Seen        map[uint32]*Cohort
@@ -51,12 +65,14 @@ type MemCensus struct {
 	last        *Cohort
 }
 
+// NewMemCensus creates a new in-memory Census.
 func NewMemCensus() *MemCensus {
 	return &MemCensus{
 		Seen: make(map[uint32]*Cohort),
 	}
 }
 
+// Add indicates an instance of the given genome was added to the world.
 func (b *MemCensus) Add(when int64, genome Genome) *Cohort {
 	var c *Cohort
 	func() {
@@ -85,6 +101,7 @@ func (b *MemCensus) Add(when int64, genome Genome) *Cohort {
 	return c
 }
 
+// Remove indicates an instance of the given genome was removed from the world.
 func (b *MemCensus) Remove(when int64, genome Genome) *Cohort {
 	var c *Cohort
 	func() {
@@ -106,30 +123,35 @@ func (b *MemCensus) Remove(when int64, genome Genome) *Cohort {
 	return c
 }
 
+// Count returns the number of things presently tracked in the world.
 func (b *MemCensus) Count() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.count
 }
 
+// CountAllTime returns the number of things ever added to the world.
 func (b *MemCensus) CountAllTime() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.countAll
 }
 
+// Distinct returns the number of distinct genomes currently represented in the world.
 func (b *MemCensus) Distinct() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.distinct
 }
 
+// DistinctAllTime returns the number of distinct genomes ever seen in the world.
 func (b *MemCensus) DistinctAllTime() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.distinctAll
 }
 
+// OnChange sets a callback to be invoked for every Add/Remove operation.
 func (b *MemCensus) OnChange(fn OnChangeCallback) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -137,13 +159,17 @@ func (b *MemCensus) OnChange(fn OnChangeCallback) {
 	b.onChange = fn
 }
 
+// DirCensus implements a Census that saves interesting genomes to disk.
+// This type wraps a MemCensus and behaves similarly.
 type DirCensus struct {
 	MemCensus
-	Dir         string
-	NumRecorded int
-	threshold   int
+	Dir         string // the parent directory holding genomes
+	NumRecorded int    // the number of genomes written to disk
+	threshold   int    // the population threshold for writing a genome to disk
 }
 
+// NewDirCensus creates a new DirCensus writing to the given dir any genome
+// that appears more than threshold times in the world.
 func NewDirCensus(dir string, threshold int) *DirCensus {
 	return &DirCensus{
 		MemCensus: MemCensus{
@@ -158,11 +184,13 @@ func (b *DirCensus) filename(c *Cohort) string {
 	return path.Join(b.Dir, fmt.Sprintf("%d.%d", c.First, c.Genome.Hash()))
 }
 
+// PreviouslyRecorded returns true if the given Cohort was previously written to disk.
 func (b *DirCensus) PreviouslyRecorded(c *Cohort) bool {
 	_, err := os.Stat(b.filename(c))
 	return err == nil
 }
 
+// RecordInDir writes the given cohort to disk.
 func (b *DirCensus) RecordInDir(c *Cohort) error {
 	f, err := os.Create(b.filename(c))
 	if err != nil {
@@ -187,6 +215,7 @@ func (b *DirCensus) RecordInDir(c *Cohort) error {
 	return nil
 }
 
+// fileGenome contains basic genome data as retrieved from disk.
 type fileGenome struct {
 	hash uint32
 	code []string
@@ -200,6 +229,7 @@ func (g *fileGenome) Code() []string {
 	return g.code
 }
 
+// Random retrieves a randomly-selected Cohort from disk.
 func (b *DirCensus) Random() (*Cohort, error) {
 	ls, err := ioutil.ReadDir(b.Dir)
 	if err != nil {
@@ -234,6 +264,8 @@ func (b *DirCensus) Random() (*Cohort, error) {
 	}, nil
 }
 
+// Add indicates an instance of the given genome was added to the world,
+// possibly writing the Cohort to disk if it exceeds the DirCensus's threshold.
 func (b *DirCensus) Add(when int64, genome Genome) *Cohort {
 	c := b.MemCensus.Add(when, genome)
 
@@ -244,6 +276,9 @@ func (b *DirCensus) Add(when int64, genome Genome) *Cohort {
 	return c
 }
 
+// Add indicates an instance of the given genome was removed from the world,
+// possibly writing the Cohort to disk to record its last-seen information if
+// it was previously written there.
 func (b *DirCensus) Remove(when int64, genome Genome) *Cohort {
 	c := b.MemCensus.Remove(when, genome)
 
