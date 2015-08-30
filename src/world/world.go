@@ -116,6 +116,8 @@ func (w *BasicWorld) Dimensions() (int, int) {
 // coordinates can be outside of the (width, height) ranges for the world,
 // which will just result in the location wrapping around.
 func (w *BasicWorld) offset(x, y int) int {
+	x = modPos(x, w.Width)
+	y = modPos(y, w.Height)
 	return modPos(y*w.Width+x, w.Height*w.Width)
 }
 

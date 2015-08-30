@@ -124,7 +124,9 @@ func main() {
 	// Use a Census instance to track the evolution of "genomes" over time.
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
 	s.Census.OnChange(func(b census.Census, _ *census.Cohort, _ bool) {
-		ensureMinimumOrgs(s, b.Count())
+		if !s.IsStopped() {
+			ensureMinimumOrgs(s, b.Count())
+		}
 	})
 
 	// Just for fun

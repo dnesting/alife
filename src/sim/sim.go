@@ -13,9 +13,9 @@ type Sim struct {
 	World  world.World
 	Census *census.DirCensus
 
-	mu   sync.RWMutex
-	wg   sync.WaitGroup
-	stop bool
+	mu      sync.RWMutex
+	wg      sync.WaitGroup
+	running bool
 }
 
 // NewSim creates a new Sim with the given world.
@@ -31,7 +31,7 @@ func (s *Sim) StopAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.stop = true
+	s.running = false
 }
 
 // IsStopped returns true if StopAll was invoked.
@@ -39,7 +39,7 @@ func (s *Sim) IsStopped() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.stop
+	return !s.running
 }
 
 // Runnable represents a world occupant that is capable of doing something.
@@ -75,7 +75,11 @@ func (s *Sim) Start(st Runnable) {
 // that the world must be seeded with one or more Runnable items before Run
 // will be effective.
 func (s *Sim) Run() {
-	s.stop = false
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.running = true
+	}()
 	s.World.Each(func(x, y int, o world.Occupant) {
 		if st, ok := o.(Runnable); ok {
 			s.Start(st)
