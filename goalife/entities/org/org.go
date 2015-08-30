@@ -8,19 +8,6 @@ import "math/rand"
 import "github.com/dnesting/alife/goalife/entities"
 import "github.com/dnesting/alife/goalife/sim"
 
-// MutateOnDivideProb is the probability that Mutate() will be invoked on a Mutable
-// that is the product of a Divide() operation.
-const MutateOnDivideProb = 0.01
-
-// BodyEnergy is the amount of energy in the corpse/food component of an organism. When
-// an organism is spawned, this much energy is needed up front, and when an organism
-// dies, it is replaced with a Food pellet with this much energy.
-const BodyEnergy = 1000
-
-// SenseDistance is how many cells we examine to compute the amount of energy "sensed"
-// in a particular direction.
-const SenseDistance = 10
-
 // SenseFilter is used to determine if an item that occupies a cell during a Sense operation
 // should contribute to the aggregated energy value for that operation.
 type SenseFilter func(o interface{}) float64
@@ -142,14 +129,14 @@ func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrg
 	nb.Dir = rand.Intn(8)
 
 	if m, ok := no.(Mutable); ok {
-		if rand.Float32() < MutateOnDivideProb {
+		if rand.Float32() < s.MutateOnDivideProb {
 			m.Mutate()
 		}
 	}
 
 	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
 	if s.World.PutIfEmpty(x, y, no) == nil {
-		amt, e := o.AddEnergy(-BodyEnergy)
+		amt, e := o.AddEnergy(-s.BodyEnergy)
 		if e == 0 {
 			s.World.Put(x, y, entities.NewFood(-amt))
 		} else {
@@ -172,7 +159,7 @@ func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrg
 // observed (for instance, to ignore organisms that have the same genome).
 func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
 	result := 0.0
-	for dist := 1; dist <= SenseDistance; dist++ {
+	for dist := 1; dist <= s.SenseDistance; dist++ {
 		x, y := resolveDir(o.X, o.Y, o.Dir, dist)
 		if occ := s.World.At(x, y); occ != nil {
 			if e, ok := occ.(entities.Energetic); ok {
@@ -191,7 +178,7 @@ func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
 // the organism's goroutine exit without performing any further operations after
 // this function is called.
 func (o *BaseOrganism) Die(s *sim.Sim, n Organism, reason string) {
-	s.World.Put(o.X, o.Y, entities.NewFood(o.Energy()+BodyEnergy))
+	s.World.Put(o.X, o.Y, entities.NewFood(o.Energy()+s.BodyEnergy))
 	//fmt.Printf("%v (%v) dying: %s\n", o, x, reason)
 }
 

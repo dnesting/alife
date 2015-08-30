@@ -120,6 +120,9 @@ func main() {
 
 	// The Sim instance manages most aspects of the simulation.
 	s := sim.NewSim(w)
+	s.MutateOnDivideProb = 0.01
+	s.BodyEnergy = 1000
+	s.SenseDistance = 10
 
 	// Use a Census instance to track the evolution of "genomes" over time.
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)

@@ -13,6 +13,19 @@ type Sim struct {
 	World  world.World
 	Census *census.DirCensus
 
+	// MutateOnDivideProb is the probability that Mutate() will be invoked on a Mutable
+	// that is the product of a Divide() operation.
+	MutateOnDivideProb float32
+
+	// BodyEnergy is the amount of energy in the corpse/food component of an organism. When
+	// an organism is spawned, this much energy is needed up front, and when an organism
+	// dies, it is replaced with a Food pellet with this much energy.
+	BodyEnergy int
+
+	// SenseDistance is how many cells we examine to compute the amount of energy "sensed"
+	// in a particular direction.
+	SenseDistance int
+
 	mu      sync.RWMutex
 	wg      sync.WaitGroup
 	running bool
