@@ -155,7 +155,7 @@ func main() {
 	defer autoSaveTicker.Stop()
 
 	// This is called every time the world changes somehow.
-	w.OnUpdate(func(w world.World) {
+	w.OnUpdate(func(w *world.World) {
 		frame += 1
 
 		// If we want synchronous renderings, we just block
@@ -207,7 +207,7 @@ func registerGobTypes() {
 	gob.Register(&cpuorg.CpuOrganism{})
 }
 
-func saveWorld(w world.World, frame *int64) error {
+func saveWorld(w *world.World, frame *int64) error {
 	f, err := ioutil.TempFile(autoSaveDirectory, autoSaveFilename)
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func saveWorld(w world.World, frame *int64) error {
 	return nil
 }
 
-func restoreWorld(frame *int64) (world.World, error) {
+func restoreWorld(frame *int64) (*world.World, error) {
 	f, err := os.Open(path.Join(autoSaveDirectory, autoSaveFilename))
 	if err != nil {
 		return nil, err
@@ -246,7 +246,7 @@ func restoreWorld(frame *int64) (world.World, error) {
 
 	registerGobTypes()
 	dec := gob.NewDecoder(f)
-	w := &world.BasicWorld{}
+	w := &world.World{}
 	if err := dec.Decode(w); err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func restoreWorld(frame *int64) (world.World, error) {
 }
 
 // startAutoSave begins auto-saving the state of w every autoSaveSecs.
-func startAutoSave(w world.World, frame *int64, autoSaveSecs int) *time.Ticker {
+func startAutoSave(w *world.World, frame *int64, autoSaveSecs int) *time.Ticker {
 	ticker := time.NewTicker(time.Duration(autoSaveSecs) * time.Second)
 
 	go func() {

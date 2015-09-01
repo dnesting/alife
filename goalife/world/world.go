@@ -10,38 +10,18 @@ import "sync"
 type Occupant interface{}
 
 // World is a place within which occupants can exist.  It contains various functions for
-// retrieving and manipulating items by their (x, y) coordinates.
-type World interface {
-	At(x, y int) Occupant
-
-	Put(x, y int, o Occupant) Occupant
-	PutIfEmpty(x, y int, o Occupant) Occupant
-	PlaceRandomly(o Occupant) (int, int)
-	Remove(x, y int) Occupant
-	RemoveIfEqual(x, y int, o Occupant) Occupant
-	ReplaceIfEqual(x, y int, o, n Occupant) Occupant
-	MoveIfEmpty(x1, y1, x2, y2 int) Occupant
-
-	Each(fn func(x, y int, o Occupant))
-
-	Dimensions() (int, int)
-
-	ConsiderEmpty(func(o Occupant) bool)
-	OnUpdate(fn func(w World))
-	Copy() World
-}
-
-// BasicWorld is an implementation of toroidal world backed by an internal slice.
-type BasicWorld struct {
+// retrieving and manipulating items by their (x, y) coordinates.  It is implemented as
+// a toroidal 2D grid.
+type World struct {
 	Height, Width int
 
 	mu       sync.RWMutex
 	data     []Occupant
 	emptyFn  func(o Occupant) bool
-	updateFn func(w World)
+	updateFn func(w *World)
 }
 
-func (w *BasicWorld) GobEncode() ([]byte, error) {
+func (w *World) GobEncode() ([]byte, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -59,7 +39,7 @@ func (w *BasicWorld) GobEncode() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (w *BasicWorld) GobDecode(stream []byte) error {
+func (w *World) GobDecode(stream []byte) error {
 	dec := gob.NewDecoder(bytes.NewReader(stream))
 	if err := dec.Decode(&w.Height); err != nil {
 		return err
@@ -79,17 +59,17 @@ func (w *BasicWorld) GobDecode(stream []byte) error {
 // pellets, while not permitting movement of organisms into the same cells.
 // The function should return true if the occupant of the cell can be
 // considered empty enough.
-func (w *BasicWorld) ConsiderEmpty(fn func(o Occupant) bool) {
+func (w *World) ConsiderEmpty(fn func(o Occupant) bool) {
 	w.emptyFn = fn
 }
 
 // OnUpdate specifies a func to be called every time a change to the world
 // occurs. Changes include placement, removal, or movement of an occupant.
-func (w *BasicWorld) OnUpdate(fn func(w World)) {
+func (w *World) OnUpdate(fn func(w *World)) {
 	w.updateFn = fn
 }
 
-func (w *BasicWorld) isEmpty(o Occupant) bool {
+func (w *World) isEmpty(o Occupant) bool {
 	if o == nil {
 		return true
 	}
@@ -108,20 +88,20 @@ func modPos(v, max int) int {
 }
 
 // Dimensions gives the width and height dimensions of the world.
-func (w *BasicWorld) Dimensions() (int, int) {
+func (w *World) Dimensions() (int, int) {
 	return w.Width, w.Height
 }
 
 // offset converts the (x, y) coordinates to a slice offset.  The given
 // coordinates can be outside of the (width, height) ranges for the world,
 // which will just result in the location wrapping around.
-func (w *BasicWorld) offset(x, y int) int {
+func (w *World) offset(x, y int) int {
 	x = modPos(x, w.Width)
 	y = modPos(y, w.Height)
 	return modPos(y*w.Width+x, w.Height*w.Width)
 }
 
-func (w *BasicWorld) notifyUpdate() {
+func (w *World) notifyUpdate() {
 	if w.updateFn != nil {
 		w.updateFn(w)
 	}
@@ -130,7 +110,7 @@ func (w *BasicWorld) notifyUpdate() {
 // At returns the occupant at the given (x, y) coordinate.  Concurrent
 // execution may mean that the occupant has moved by the time its value
 // has been returned.
-func (w *BasicWorld) At(x, y int) Occupant {
+func (w *World) At(x, y int) Occupant {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -139,7 +119,7 @@ func (w *BasicWorld) At(x, y int) Occupant {
 
 // Put places an occupant (or nil) in a cell, unconditionally.  The
 // existing occupant, if any, is returned.
-func (w *BasicWorld) Put(x, y int, o Occupant) Occupant {
+func (w *World) Put(x, y int, o Occupant) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -154,7 +134,7 @@ func (w *BasicWorld) Put(x, y int, o Occupant) Occupant {
 // the (x, y) coordinates where it was placed.  The occupant will not
 // be placed in a cell that's already occupied, unless the existing
 // occupant is considered "empty" by the ConsiderEmpty callback.
-func (w *BasicWorld) PlaceRandomly(o Occupant) (int, int) {
+func (w *World) PlaceRandomly(o Occupant) (int, int) {
 	width, height := w.Dimensions()
 	var x, y int
 	for {
@@ -168,7 +148,7 @@ func (w *BasicWorld) PlaceRandomly(o Occupant) (int, int) {
 
 // PutIfEmpty places an occupant in a given location, but only if the
 // location is empty, or considered "empty" by the ConsiderEmpty callback.
-func (w *BasicWorld) PutIfEmpty(x, y int, o Occupant) Occupant {
+func (w *World) PutIfEmpty(x, y int, o Occupant) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -184,7 +164,7 @@ func (w *BasicWorld) PutIfEmpty(x, y int, o Occupant) Occupant {
 // MoveIfEmpty moves the occupant at (x1, y1) into the location (x2, y2),
 // but only if the location is empty, or considered "empty" by the
 // ConsiderEmpty callback.
-func (w *BasicWorld) MoveIfEmpty(x1, y1, x2, y2 int) Occupant {
+func (w *World) MoveIfEmpty(x1, y1, x2, y2 int) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -208,14 +188,14 @@ func (w *BasicWorld) MoveIfEmpty(x1, y1, x2, y2 int) Occupant {
 // RemoveIfEqual removes the given occupant from the given (x, y) coordinates.
 // The occupant is only removed if the occupant at (x, y) is the same as the
 // one passed.
-func (w *BasicWorld) RemoveIfEqual(x, y int, o Occupant) Occupant {
+func (w *World) RemoveIfEqual(x, y int, o Occupant) Occupant {
 	return w.ReplaceIfEqual(x, y, o, nil)
 }
 
 // ReplaceIfEqual removes the given occupant o from the given (x, y) coordinates,
 // and replaces it with the given occupant n (which may be nil). Replacement only
 // occurs if the occupant at (x, y) is the same as o.
-func (w *BasicWorld) ReplaceIfEqual(x, y int, o Occupant, n Occupant) Occupant {
+func (w *World) ReplaceIfEqual(x, y int, o Occupant, n Occupant) Occupant {
 	defer w.notifyUpdate()
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -229,19 +209,19 @@ func (w *BasicWorld) ReplaceIfEqual(x, y int, o Occupant, n Occupant) Occupant {
 }
 
 // Remove removes the occupant at (x, y), and returns it.
-func (w *BasicWorld) Remove(x, y int) Occupant {
+func (w *World) Remove(x, y int) Occupant {
 	return w.Put(x, y, nil)
 }
 
 // Copy returns a shallow copy of the world.
-func (w *BasicWorld) Copy() World {
+func (w *World) Copy() *World {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
 	data := make([]Occupant, w.Height*w.Width)
 	copy(data, w.data)
 
-	return &BasicWorld{
+	return &World{
 		Height:  w.Height,
 		Width:   w.Width,
 		data:    data,
@@ -250,7 +230,7 @@ func (w *BasicWorld) Copy() World {
 }
 
 // Each runs the given fn on each occupant in the world.
-func (w *BasicWorld) Each(fn func(x, y int, o Occupant)) {
+func (w *World) Each(fn func(x, y int, o Occupant)) {
 	for y := 0; y < w.Height; y++ {
 		for x := 0; x < w.Width; x++ {
 			if i := w.At(x, y); i != nil {
@@ -266,7 +246,7 @@ type Printable interface {
 	Rune() rune
 }
 
-func (w *BasicWorld) String() string {
+func (w *World) String() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -302,8 +282,8 @@ func (w *BasicWorld) String() string {
 }
 
 // New creates a World with the given dimensions.
-func New(h, w int) World {
-	return &BasicWorld{
+func New(h, w int) *World {
+	return &World{
 		Height: h,
 		Width:  w,
 		data:   make([]Occupant, h*w),

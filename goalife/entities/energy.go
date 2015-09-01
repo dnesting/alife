@@ -9,7 +9,7 @@ import "github.com/dnesting/alife/goalife/world"
 type Energetic interface {
 	Energy() int
 	AddEnergy(amt int) (int, int)
-	Consume(w world.World, x, y, amt int) int
+	Consume(w *world.World, x, y, amt int) int
 }
 
 // Battery is a simple implementation of Energetic that just stores a
@@ -47,7 +47,7 @@ func (e *Battery) AddEnergy(amt int) (int, int) {
 // a change in energy levels (such as replacing an organism with a food
 // pellet when it reaches zero energy).  Prefer this to AddEnergy(-amt)
 // if you'd like the callee to react to the change.
-func (e *Battery) Consume(w world.World, x, y, amt int) int {
+func (e *Battery) Consume(w *world.World, x, y, amt int) int {
 	act, _ := e.AddEnergy(-amt)
 	return -act
 }

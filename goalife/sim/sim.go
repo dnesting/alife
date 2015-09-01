@@ -10,7 +10,7 @@ import "github.com/dnesting/alife/goalife/world"
 // Sim encapsulates a world, a census and performs the Run operation on the
 // runnable entities within the world.
 type Sim struct {
-	World  world.World
+	World  *world.World
 	Census *census.DirCensus
 
 	// MutateOnDivideProb is the probability that Mutate() will be invoked on a Mutable
@@ -32,7 +32,7 @@ type Sim struct {
 }
 
 // NewSim creates a new Sim with the given world.
-func NewSim(w world.World) *Sim {
+func NewSim(w *world.World) *Sim {
 	return &Sim{
 		World: w,
 	}

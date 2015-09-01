@@ -27,7 +27,7 @@ func (f *Food) Rune() rune {
 
 // Consume consumes the given amt of energy, removing the food pellet from
 // the world once its energy level drops to zero.
-func (f *Food) Consume(w world.World, x, y, amt int) int {
+func (f *Food) Consume(w *world.World, x, y, amt int) int {
 	act, e := f.AddEnergy(-amt)
 	if e == 0 {
 		w.Remove(x, y)
