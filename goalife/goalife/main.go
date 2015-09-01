@@ -74,10 +74,12 @@ func resurrectOrg(s *sim.Sim) {
 		fmt.Println(err.Error())
 		return
 	}
-	o := cpuorg.FromCode(c.Genome.Code())
-	o.AddEnergy(initialEnergy)
-	o.PlaceRandomly(s, o)
-	s.Start(o)
+	if c != nil {
+		o := cpuorg.FromCode(c.Genome.Code())
+		o.AddEnergy(initialEnergy)
+		o.PlaceRandomly(s, o)
+		s.Start(o)
+	}
 }
 
 func ensureMinimumOrgs(s *sim.Sim, count int) {
@@ -99,9 +101,8 @@ func main() {
 
 	// First attempt to restore the world from an auto-save
 	w, err := restoreWorld(&frame)
-	if err != nil {
-		panic(err.Error())
-		fmt.Printf("restore: %v\n", err)
+	if err != nil && !os.IsNotExist(err) {
+		panic(fmt.Sprintf("%v", err))
 	}
 
 	// Otherwise instantiate a new world
