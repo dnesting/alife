@@ -1,6 +1,8 @@
 // Package sim encapsulates most aspects of running a simulation.
 package sim
 
+import "fmt"
+import "io"
 import "sync"
 import "time"
 
@@ -25,6 +27,8 @@ type Sim struct {
 	// SenseDistance is how many cells we examine to compute the amount of energy "sensed"
 	// in a particular direction.
 	SenseDistance int
+
+	Tracer io.Writer
 
 	mu      sync.RWMutex
 	wg      sync.WaitGroup
@@ -99,4 +103,12 @@ func (s *Sim) Run() {
 		}
 	})
 	s.wg.Wait()
+}
+
+func (s *Sim) T(e interface{}, msg string, args ...interface{}) {
+	if s.Tracer != nil {
+		a := []interface{}{e}
+		a = append(a, args...)
+		fmt.Fprintf(s.Tracer, fmt.Sprintf("%%v: %s\n", msg), a...)
+	}
 }

@@ -120,22 +120,28 @@ func (c *Cpu) Step(s *sim.Sim, o org.Organism) (err error) {
 			if strings.Contains(err.Error(), "signal") {
 				debug.PrintStack()
 			}
+			s.T(o, "step panic: %v", err)
 		}
 	}()
 
 	op, ip := c.readOp()
 	c.Ip = ip
 	if op == nil {
-		return errors.New("unable to read next instruction")
+		err := errors.New("unable to read next instruction")
+		s.T(o, "step @%d (op): %v", ip, err)
+		return err
 	}
 
 	if err := op.Fn(s, o, c); err != nil {
+		s.T(o, "step %v (fn): %v", op, err)
 		return err
 	}
 
 	if err := c.cost(o, op.Cost); err != nil {
+		s.T(o, "step %v (cost): %v", op, err)
 		return err
 	}
+	s.T(o, "step %v", op)
 	return nil
 }
 

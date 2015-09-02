@@ -46,8 +46,8 @@ type BaseOrganism struct {
 
 func (o *BaseOrganism) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("[baseorg (%d,%d) ", o.X, o.Y))
-	b.WriteString(fmt.Sprintf("energy=%d", o.Energy()))
+	b.WriteString(fmt.Sprintf("[baseorg (%d,%d)", o.X, o.Y))
+	b.WriteString(fmt.Sprintf(" e=%d", o.Energy()))
 	b.WriteString(fmt.Sprintf(" dir=%d", o.Dir))
 	b.WriteString("]")
 	return b.String()
@@ -83,11 +83,13 @@ func resolveDir(x, y, dir, dist int) (int, int) {
 // The given Organism (n) must embed the receiver.
 func (o *BaseOrganism) PlaceRandomly(s *sim.Sim, n Organism) {
 	o.X, o.Y = s.World.PlaceRandomly(n)
+	s.T(n, "placed at: (%d,%d)", o.X, o.Y)
 }
 
 // Forward moves the organism forward one spot if it is unoccupied. If it is
 // occupied, no effect occurs.
 func (o *BaseOrganism) Forward(s *sim.Sim) {
+	s.T(o, "forward")
 	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
 	if s.World.MoveIfEmpty(o.X, o.Y, x, y) == nil {
 		o.X = x
@@ -113,6 +115,7 @@ func (o *BaseOrganism) Left() {
 // If the cell has no occupant, returns nil.
 func (o *BaseOrganism) Neighbor(s *sim.Sim) interface{} {
 	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
+	s.T(o, "neighbor (%d,%d)", x, y)
 	return s.World.At(x, y)
 }
 
@@ -126,6 +129,7 @@ func (o *BaseOrganism) SetDir(dir int) {
 // The energy of the original and new organisms will be split according to frac (1.0 = all available energy is given to the child).
 // no refers to the child organism, while nb refers to the embedded BaseOrganism within it.
 func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrganism) {
+	s.T(o, "divide(%d, %v)", frac, no)
 	nb.Dir = rand.Intn(8)
 
 	if m, ok := no.(Mutable); ok {
@@ -158,6 +162,7 @@ func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrg
 // provided, which allows for an additional multiplier to be applied to each item
 // observed (for instance, to ignore organisms that have the same genome).
 func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
+	s.T(o, "sense")
 	result := 0.0
 	for dist := 1; dist <= s.SenseDistance; dist++ {
 		x, y := resolveDir(o.X, o.Y, o.Dir, dist)
@@ -178,6 +183,7 @@ func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
 // the organism's goroutine exit without performing any further operations after
 // this function is called.
 func (o *BaseOrganism) Die(s *sim.Sim, n Organism, reason string) {
+	s.T(o, "dying: %s", reason)
 	s.World.Put(o.X, o.Y, entities.NewFood(o.Energy()+s.BodyEnergy))
 	//fmt.Printf("%v (%v) dying: %s\n", o, x, reason)
 }
@@ -186,6 +192,7 @@ func (o *BaseOrganism) Die(s *sim.Sim, n Organism, reason string) {
 // If the neighbor does not implement Energetic, no effect occurs.
 func (o *BaseOrganism) EatNeighbor(s *sim.Sim, amt int) {
 	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
+	s.T(o, "eat (%d) (%d,%d)", amt, x, y)
 	if n := s.World.At(x, y); n != nil {
 		if e, ok := n.(entities.Energetic); ok {
 			act := e.Consume(s.World, x, y, amt)

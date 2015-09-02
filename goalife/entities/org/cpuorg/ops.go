@@ -13,6 +13,10 @@ type Op struct {
 	Cost int                                            // the instruction's energy cost
 }
 
+func (o Op) String() string {
+	return o.Name
+}
+
 var OpTable []Op
 
 func init() {

@@ -89,6 +89,7 @@ func (o *CpuOrganism) Mutate() {
 // If an error occurs executing an instruction, the organism is killed and execution
 // halted.
 func (o *CpuOrganism) Run(s *sim.Sim) {
+	s.T(o, "run")
 	for !s.IsStopped() {
 		if err := o.Step(s); err != nil {
 			o.Die(s, o, err.Error())
