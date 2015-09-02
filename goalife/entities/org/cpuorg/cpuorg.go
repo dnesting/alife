@@ -5,6 +5,7 @@ package cpuorg
 import "fmt"
 import "hash/crc32"
 import "math/rand"
+import "runtime"
 
 import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/entities/org"
@@ -95,5 +96,6 @@ func (o *CpuOrganism) Run(s *sim.Sim) {
 			o.Die(s, o, err.Error())
 			return
 		}
+		runtime.Gosched()
 	}
 }

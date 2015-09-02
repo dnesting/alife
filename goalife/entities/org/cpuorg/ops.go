@@ -1,6 +1,7 @@
 package cpuorg
 
 import "bytes"
+import "errors"
 import "math/rand"
 
 import "github.com/dnesting/alife/goalife/entities/org"
@@ -259,6 +260,9 @@ func OpMul(s *sim.Sim, o org.Organism, c *Cpu) error {
 }
 
 func OpDiv(s *sim.Sim, o org.Organism, c *Cpu) error {
+	if c.R[1] == 0 {
+		return errors.New("division by zero")
+	}
 	c.R[0] = asUByte(c.R[0] / c.R[1])
 	return nil
 }

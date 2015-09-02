@@ -132,15 +132,16 @@ func (c *Cpu) Step(s *sim.Sim, o org.Organism) (err error) {
 		return err
 	}
 
+	if err := c.cost(o, op.Cost); err != nil {
+		s.T(o, "step %v (cost): %v", op, err)
+		return err
+	}
+
 	if err := op.Fn(s, o, c); err != nil {
 		s.T(o, "step %v (fn): %v", op, err)
 		return err
 	}
 
-	if err := c.cost(o, op.Cost); err != nil {
-		s.T(o, "step %v (cost): %v", op, err)
-		return err
-	}
 	s.T(o, "step %v", op)
 	return nil
 }
