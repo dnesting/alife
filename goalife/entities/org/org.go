@@ -144,7 +144,7 @@ func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrg
 		if e == 0 {
 			s.World.Put(x, y, entities.NewFood(-amt))
 		} else {
-			amt = -int((1.0 - frac) * float32(o.Energy()))
+			amt = -int(frac * float32(o.Energy()))
 			amt, _ = o.AddEnergy(amt)
 			no.AddEnergy(-amt)
 			nb.X = x
