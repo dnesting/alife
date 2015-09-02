@@ -22,6 +22,8 @@ import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
 
+const printWorld = false
+
 // syncUpdate synchronizes an organism's execution until its last
 // operation gets rendered. This greatly slows execution, but allows
 // for a more pleasing visual representation of the organisms as
@@ -148,8 +150,12 @@ func main() {
 	fmt.Print("\033[H\033[2J")
 
 	// Start rendering updates to the screen periodically.
-	screenUpdated, screenTicker := startScreenUpdates(s, &frame, refreshHz)
-	defer screenTicker.Stop()
+	var screenUpdated *sync.Cond
+	var screenTicker *time.Ticker
+	if printWorld {
+		screenUpdated, screenTicker = startScreenUpdates(s, &frame, refreshHz)
+		defer screenTicker.Stop()
+	}
 
 	// Start auto-saving the world periodically.
 	autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
@@ -165,7 +171,7 @@ func main() {
 		// update, meaning that organisms that performed a
 		// world-changing action won't get to do another
 		// one until their last action got rendered.
-		if syncUpdate {
+		if syncUpdate && printWorld {
 			screenUpdated.L.Lock()
 			defer screenUpdated.L.Unlock()
 			screenUpdated.Wait()
