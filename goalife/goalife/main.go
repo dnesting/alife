@@ -92,7 +92,8 @@ func resurrectOrg(s *sim.Sim) {
 }
 
 func ensureMinimumOrgs(s *sim.Sim, count int) {
-	for i := count; i < ensureOrgs; i++ {
+	//for i := count; i < ensureOrgs; i++ {
+	if count < ensureOrgs {
 		if rand.Float32() < fractionFromHistory {
 			resurrectOrg(s)
 		} else {
@@ -127,7 +128,7 @@ func main() {
 
 	// We want to consider food pellets to be equivalent to an empty cell for
 	// the purposes of placing a new organism.
-	w.ConsiderEmpty(func(o world.Occupant) bool {
+	w.ConsiderEmpty(func(o interface{}) bool {
 		if _, ok := o.(*entities.Food); ok {
 			return true
 		}
@@ -173,8 +174,8 @@ func main() {
 	}
 
 	// Start auto-saving the world periodically.
-	autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
-	defer autoSaveTicker.Stop()
+	//autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
+	//defer autoSaveTicker.Stop()
 
 	// This is called every time the world changes somehow.
 	w.OnUpdate(func(w *world.World) {
@@ -215,6 +216,11 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 			x, y := s.World.Dimensions()
 			fmt.Printf("random: %+v\033[K\n",
 				s.World.At(rand.Intn(x), rand.Intn(y)))
+			//s.World.Each(func(l world.Locator) {
+			//	if _, ok := l.Value().(*entities.Food); !ok {
+			//		fmt.Println(l.Value())
+			//	}
+			//})
 			if syncUpdate {
 				printed.Broadcast()
 			}

@@ -1,13 +1,121 @@
 // Package world defines the world within which organisms and other occupants will exist.
 package world
 
+// We aim for the world to be safe for concurrent access.  This requires setting some ground rules:
+//
+// 1. To access world.data[i] to obtain nil or an Entity, you must hold world.mu.
+// 2. To modify or rely upon the location or content of an Entity, you must hold entity.mu.
+// 3. It is permissible to perform (1) only after (2).  It is illegal to lock entity.mu while holding world.mu.
+// 4. To do (2) with multiple entities at once, you must first hold world.multi.
+
 import "bytes"
 import "encoding/gob"
+import "fmt"
 import "math/rand"
 import "sync"
 
-// Occupant is anything that occupies a cell in a world.
-type Occupant interface{}
+type Locator interface {
+	Replace(n interface{}) Locator
+	Relative(dx, dy int) Locator
+	PutIfEmpty(dx, dy int, n interface{}) Locator
+	MoveIfEmpty(dx, dy int) bool
+	Remove()
+	Value() interface{}
+}
+
+type Entity struct {
+	mu      sync.Mutex
+	W       *World
+	X, Y    int
+	V       interface{}
+	Invalid bool
+}
+
+func (e *Entity) String() string {
+	return fmt.Sprintf("(%d,%d)", e.X, e.Y)
+}
+
+func (e *Entity) checkValid() {
+	if e.Invalid {
+		panic(fmt.Sprintf("access attempted to invalidated entity %+v", e))
+	}
+}
+
+func (e *Entity) removeIfAt(x, y int) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.checkValid()
+	if e.X == x && e.Y == y {
+		e.W.remove(x, y)
+		e.Invalid = true
+		return true
+	}
+	return false
+}
+
+func (e *Entity) Remove() {
+	defer e.W.notifyUpdate()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.checkValid()
+	e.W.remove(e.X, e.Y)
+	e.Invalid = true
+}
+
+func (e *Entity) Replace(n interface{}) Locator {
+	e.W.T(e, "Replace(%v)", n)
+	defer e.W.notifyUpdate()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.checkValid()
+
+	loc := e.W.put(e.X, e.Y, n)
+	loc.checkLocationInvariant()
+	return loc
+}
+
+func (e *Entity) Relative(dx, dy int) Locator {
+	// Rule (3): e.w.At only needs the world lock.
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.checkValid()
+
+	return e.W.At(e.X+dx, e.Y+dy)
+}
+
+func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
+	// Rule (4): e.w.PutIfEmpty may end up replacing an existing
+	// entity, so we need to grab the multi lock.
+	e.W.multi.Lock()
+	defer e.W.multi.Unlock()
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.checkValid()
+
+	return e.W.PutIfEmpty(e.X+dx, e.Y+dy, n)
+}
+
+func (e *Entity) MoveIfEmpty(dx, dy int) bool {
+	defer e.W.notifyUpdate()
+	// Rule (4): e.w.moveIfEmpty may end up replacing an existing
+	// entity, so we need to grab the multi lock.
+	e.W.multi.Lock()
+	defer e.W.multi.Unlock()
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.checkValid()
+
+	return e.W.moveIfEmpty(e, e.X+dx, e.Y+dy)
+}
+
+func (e *Entity) Value() interface{} {
+	if e != nil {
+		return e.V
+	}
+	return nil
+}
 
 // World is a place within which occupants can exist.  It contains various functions for
 // retrieving and manipulating items by their (x, y) coordinates.  It is implemented as
@@ -15,9 +123,10 @@ type Occupant interface{}
 type World struct {
 	Height, Width int
 
+	multi    sync.RWMutex
 	mu       sync.RWMutex
-	data     []Occupant
-	emptyFn  func(o Occupant) bool
+	data     []*Entity
+	emptyFn  func(o interface{}) bool
 	updateFn func(w *World)
 }
 
@@ -59,7 +168,7 @@ func (w *World) GobDecode(stream []byte) error {
 // pellets, while not permitting movement of organisms into the same cells.
 // The function should return true if the occupant of the cell can be
 // considered empty enough.
-func (w *World) ConsiderEmpty(fn func(o Occupant) bool) {
+func (w *World) ConsiderEmpty(fn func(o interface{}) bool) {
 	w.emptyFn = fn
 }
 
@@ -69,7 +178,7 @@ func (w *World) OnUpdate(fn func(w *World)) {
 	w.updateFn = fn
 }
 
-func (w *World) isEmpty(o Occupant) bool {
+func (w *World) isEmpty(o interface{}) bool {
 	if o == nil {
 		return true
 	}
@@ -114,110 +223,127 @@ func (w *World) notifyUpdate() {
 	}
 }
 
-// At returns the occupant at the given (x, y) coordinate.  Concurrent
+func (w *World) get(x, y int) *Entity {
+	return w.data[w.offset(x, y)]
+}
+
+func (w *World) put(x, y int, entity interface{}) *Entity {
+	e := &Entity{
+		W: w,
+		X: x,
+		Y: y,
+		V: entity,
+	}
+	w.data[w.offset(x, y)] = e
+	return e
+}
+
+func (w *World) remove(x, y int) interface{} {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	old := w.data[w.offset(x, y)]
+	w.data[w.offset(x, y)] = nil
+	return old.Value()
+}
+
+// at returns the occupant at the given (x, y) coordinate.  Concurrent
 // execution may mean that the occupant has moved by the time its value
 // has been returned.
-func (w *World) At(x, y int) Occupant {
+func (w *World) At(x, y int) Locator {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-
-	return w.data[w.offset(x, y)]
+	return w.get(x, y)
 }
 
 // Put places an occupant (or nil) in a cell, unconditionally.  The
 // existing occupant, if any, is returned.
-func (w *World) Put(x, y int, o Occupant) Occupant {
+func (w *World) Put(x, y int, o interface{}) Locator {
 	defer w.notifyUpdate()
 	w.mu.Lock()
-	defer w.mu.Unlock()
 
-	offset := w.offset(x, y)
-	old := w.data[offset]
-	w.data[offset] = o
-	return old
+	if old := w.get(x, y); old != nil {
+		w.mu.Unlock()
+		return old.Replace(o)
+	}
+	defer w.mu.Unlock()
+	return w.put(x, y, o)
 }
 
 // PlaceRandomly places an occupant in a random location, and returns
 // the (x, y) coordinates where it was placed.  The occupant will not
 // be placed in a cell that's already occupied, unless the existing
 // occupant is considered "empty" by the ConsiderEmpty callback.
-func (w *World) PlaceRandomly(o Occupant) (int, int) {
+func (w *World) PlaceRandomly(o interface{}) Locator {
 	width, height := w.Dimensions()
-	var x, y int
 	for {
-		x, y = rand.Intn(width), rand.Intn(height)
-		if w.PutIfEmpty(x, y, o) == nil {
-			break
+		x, y := rand.Intn(width), rand.Intn(height)
+		if loc := w.PutIfEmpty(x, y, o); loc != nil {
+			return loc
 		}
 	}
-	return x, y
+}
+
+// clearIfEmpty clears (x,y) if possible and returns true, else returns false.
+// Requires holding w.mu.
+func (w *World) clearIfEmpty(x, y int) bool {
+	// Concurrency rule (3) means we must give up w.mu before having the entity
+	// being cleared remove itself.  Because this happens, there's a race where
+	// another goroutine could do something with the entity in that cell, so we
+	// enter a loop and have the entity double-check that it's in the same cell
+	// we expect it to be in before removing it.
+	for {
+		old := w.get(x, y)
+		if old == nil {
+			// cell is empty, maintain w.mu and we'll just move pointers around
+			break
+		}
+
+		if w.isEmpty(old.Value()) {
+			// cell is occupied but needs to be replaced, so have the locator
+			// remove itself without holding w.mu and we'll grab w.mu again
+			// when it's done.
+			w.mu.Unlock()
+			removed := old.removeIfAt(x, y)
+			w.mu.Lock()
+			if removed {
+				return true
+			}
+		} else {
+			// cell is not empty, so fail the move operation
+			return false
+		}
+	}
+	return true
 }
 
 // PutIfEmpty places an occupant in a given location, but only if the
 // location is empty, or considered "empty" by the ConsiderEmpty callback.
-func (w *World) PutIfEmpty(x, y int, o Occupant) Occupant {
+func (w *World) PutIfEmpty(x, y int, o interface{}) Locator {
 	defer w.notifyUpdate()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	offset := w.offset(x, y)
-	if w.isEmpty(w.data[offset]) {
-		w.data[offset] = o
+	if !w.clearIfEmpty(x, y) {
 		return nil
 	}
-	return w.data[offset]
+
+	return w.put(x, y, o)
 }
 
-// MoveIfEmpty moves the occupant at (x1, y1) into the location (x2, y2),
-// but only if the location is empty, or considered "empty" by the
-// ConsiderEmpty callback.
-func (w *World) MoveIfEmpty(x1, y1, x2, y2 int) Occupant {
-	defer w.notifyUpdate()
+// moveIfEmpty moves the given entity to its new coordinates.
+// Requires that e.mu already be held.  If (x, y) is occupied but "empty",
+// the entity there will be removed.  Returns true if the move occurred.
+func (w *World) moveIfEmpty(e *Entity, x, y int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	o1 := w.offset(x1, y1)
-	o2 := w.offset(x2, y2)
-
-	// If source cell is empty, don't move anything (return success)
-	if w.data[o1] == nil {
-		return nil
+	if !w.clearIfEmpty(x, y) {
+		return false
 	}
-	// If dest cell isn't empty, don't move anything (return its occupant)
-	if w.data[o2] != nil {
-		return w.data[o2]
-	}
-	w.data[o2] = w.data[o1]
-	w.data[o1] = nil
-	return nil
-}
 
-// RemoveIfEqual removes the given occupant from the given (x, y) coordinates.
-// The occupant is only removed if the occupant at (x, y) is the same as the
-// one passed.
-func (w *World) RemoveIfEqual(x, y int, o Occupant) Occupant {
-	return w.ReplaceIfEqual(x, y, o, nil)
-}
-
-// ReplaceIfEqual removes the given occupant o from the given (x, y) coordinates,
-// and replaces it with the given occupant n (which may be nil). Replacement only
-// occurs if the occupant at (x, y) is the same as o.
-func (w *World) ReplaceIfEqual(x, y int, o Occupant, n Occupant) Occupant {
-	defer w.notifyUpdate()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	offset := w.offset(x, y)
-	orig := w.data[offset]
-	if orig == o {
-		w.data[offset] = n
-	}
-	return orig
-}
-
-// Remove removes the occupant at (x, y), and returns it.
-func (w *World) Remove(x, y int) Occupant {
-	return w.Put(x, y, nil)
+	w.data[w.offset(e.X, e.Y)] = nil
+	w.data[w.offset(x, y)] = e
+	return true
 }
 
 // Copy returns a shallow copy of the world.
@@ -225,7 +351,7 @@ func (w *World) Copy() *World {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	data := make([]Occupant, w.Height*w.Width)
+	data := make([]*Entity, w.Height*w.Width)
 	copy(data, w.data)
 
 	return &World{
@@ -237,12 +363,11 @@ func (w *World) Copy() *World {
 }
 
 // Each runs the given fn on each occupant in the world.
-func (w *World) Each(fn func(x, y int, o Occupant)) {
-	for y := 0; y < w.Height; y++ {
-		for x := 0; x < w.Width; x++ {
-			if i := w.At(x, y); i != nil {
-				fn(x, y, i)
-			}
+func (w *World) Each(fn func(loc Locator)) {
+	c := w.Copy()
+	for i := 0; i < len(c.data); i++ {
+		if c.data[i] != nil {
+			fn(c.data[i])
 		}
 	}
 }
@@ -274,7 +399,7 @@ func (w *World) String() string {
 			if i == nil {
 				b.WriteString(" ")
 			} else {
-				switch i := i.(type) {
+				switch i := i.Value().(type) {
 				case Printable:
 					b.WriteRune(i.Rune())
 				default:
@@ -293,6 +418,6 @@ func New(h, w int) *World {
 	return &World{
 		Height: h,
 		Width:  w,
-		data:   make([]Occupant, h*w),
+		data:   make([]*Entity, h*w),
 	}
 }
