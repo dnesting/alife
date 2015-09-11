@@ -142,6 +142,7 @@ func main() {
 	s.SenseDistance = 10
 	if tracing {
 		s.Tracer = os.Stdout
+		w.Tracer = os.Stdout
 	}
 
 	// Use a Census instance to track the evolution of "genomes" over time.
@@ -174,8 +175,9 @@ func main() {
 	}
 
 	// Start auto-saving the world periodically.
-	//autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
-	//defer autoSaveTicker.Stop()
+	// TODO(dnesting): This is broken because we can't use gob to save an array with nil values
+	// autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
+	// defer autoSaveTicker.Stop()
 
 	// This is called every time the world changes somehow.
 	w.OnUpdate(func(w *world.World) {
@@ -216,11 +218,6 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 			x, y := s.World.Dimensions()
 			fmt.Printf("random: %+v\033[K\n",
 				s.World.At(rand.Intn(x), rand.Intn(y)))
-			//s.World.Each(func(l world.Locator) {
-			//	if _, ok := l.Value().(*entities.Food); !ok {
-			//		fmt.Println(l.Value())
-			//	}
-			//})
 			if syncUpdate {
 				printed.Broadcast()
 			}

@@ -92,6 +92,7 @@ func (o *CpuOrganism) Mutate() {
 func (o *CpuOrganism) Run(s *sim.Sim) {
 	s.T(o, "run")
 	defer func() { s.T(o, "run exiting") }()
+
 	for !s.IsStopped() {
 		if err := o.Step(s); err != nil {
 			o.Die(s, o, err.Error())

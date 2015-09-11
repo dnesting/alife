@@ -11,6 +11,7 @@ package world
 import "bytes"
 import "encoding/gob"
 import "fmt"
+import "io"
 import "math/rand"
 import "sync"
 
@@ -42,6 +43,7 @@ func (e *Entity) checkValid() {
 }
 
 func (e *Entity) removeIfAt(x, y int) bool {
+	e.W.T(e, "removeIfAt(%d,%d)", x, y)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
@@ -53,13 +55,21 @@ func (e *Entity) removeIfAt(x, y int) bool {
 	return false
 }
 
+func (e *Entity) checkLocationInvariant() {
+	x := e.W.At(e.X, e.Y)
+	if x != e {
+		panic(fmt.Sprintf("inconsistent location: %v vs %v", e, x))
+	}
+}
+
 func (e *Entity) Remove() {
+	e.W.T(e, "Remove")
 	defer e.W.notifyUpdate()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
+	e.checkLocationInvariant()
 	e.W.remove(e.X, e.Y)
-	e.Invalid = true
 }
 
 func (e *Entity) Replace(n interface{}) Locator {
@@ -68,6 +78,7 @@ func (e *Entity) Replace(n interface{}) Locator {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
+	e.checkLocationInvariant()
 
 	loc := e.W.put(e.X, e.Y, n)
 	loc.checkLocationInvariant()
@@ -79,8 +90,11 @@ func (e *Entity) Relative(dx, dy int) Locator {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
+	e.checkLocationInvariant()
 
-	return e.W.At(e.X+dx, e.Y+dy)
+	l := e.W.At(e.X+dx, e.Y+dy)
+	e.W.T(e, "Relative(%d,%d) = %v", dx, dy, l)
+	return l
 }
 
 func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
@@ -92,8 +106,14 @@ func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
+	e.checkLocationInvariant()
 
-	return e.W.PutIfEmpty(e.X+dx, e.Y+dy, n)
+	l := e.W.PutIfEmpty(e.X+dx, e.Y+dy, n)
+	if l, ok := l.(*Entity); ok {
+		l.checkLocationInvariant()
+	}
+	e.W.T(e, "PutIfEmpty(%d,%d, %v)", dx, dy, n)
+	return l
 }
 
 func (e *Entity) MoveIfEmpty(dx, dy int) bool {
@@ -106,8 +126,12 @@ func (e *Entity) MoveIfEmpty(dx, dy int) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
+	e.checkLocationInvariant()
 
-	return e.W.moveIfEmpty(e, e.X+dx, e.Y+dy)
+	l := e.W.moveIfEmpty(e, e.X+dx, e.Y+dy)
+	e.checkLocationInvariant()
+	e.W.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, l)
+	return l
 }
 
 func (e *Entity) Value() interface{} {
@@ -128,6 +152,7 @@ type World struct {
 	data     []*Entity
 	emptyFn  func(o interface{}) bool
 	updateFn func(w *World)
+	Tracer   io.Writer
 }
 
 func (w *World) GobEncode() ([]byte, error) {
@@ -228,6 +253,7 @@ func (w *World) get(x, y int) *Entity {
 }
 
 func (w *World) put(x, y int, entity interface{}) *Entity {
+	w.validateCoords(x, y)
 	e := &Entity{
 		W: w,
 		X: x,
@@ -243,6 +269,7 @@ func (w *World) remove(x, y int) interface{} {
 	defer w.mu.Unlock()
 	old := w.data[w.offset(x, y)]
 	w.data[w.offset(x, y)] = nil
+	old.X, old.Y = -1, -1
 	return old.Value()
 }
 
@@ -258,11 +285,13 @@ func (w *World) At(x, y int) Locator {
 // Put places an occupant (or nil) in a cell, unconditionally.  The
 // existing occupant, if any, is returned.
 func (w *World) Put(x, y int, o interface{}) Locator {
+	w.T(o, "w.Put(%d,%d)", x, y)
 	defer w.notifyUpdate()
 	w.mu.Lock()
 
 	if old := w.get(x, y); old != nil {
 		w.mu.Unlock()
+		w.T(o, "- replacing %v", old)
 		return old.Replace(o)
 	}
 	defer w.mu.Unlock()
@@ -278,6 +307,7 @@ func (w *World) PlaceRandomly(o interface{}) Locator {
 	for {
 		x, y := rand.Intn(width), rand.Intn(height)
 		if loc := w.PutIfEmpty(x, y, o); loc != nil {
+			w.T(o, "w.PlaceRandomly = %v", loc)
 			return loc
 		}
 	}
@@ -291,6 +321,8 @@ func (w *World) clearIfEmpty(x, y int) bool {
 	// another goroutine could do something with the entity in that cell, so we
 	// enter a loop and have the entity double-check that it's in the same cell
 	// we expect it to be in before removing it.
+	count := 0
+	w.validateCoords(x, y)
 	for {
 		old := w.get(x, y)
 		if old == nil {
@@ -312,22 +344,37 @@ func (w *World) clearIfEmpty(x, y int) bool {
 			// cell is not empty, so fail the move operation
 			return false
 		}
+		count++
+		if count > 100 {
+			panic(fmt.Sprintf("stuck trying to clear (%d,%d), most recently got %v: %v", x, y, old, old.Value()))
+		}
 	}
 	return true
+}
+
+func (w *World) validateCoords(x, y int) {
+	if x >= w.Width || y >= w.Height || x < 0 || y < 0 {
+		panic(fmt.Sprintf("(%d, %d) outside of world bounds (%d, %d)", x, y, w.Width, w.Height))
+	}
 }
 
 // PutIfEmpty places an occupant in a given location, but only if the
 // location is empty, or considered "empty" by the ConsiderEmpty callback.
 func (w *World) PutIfEmpty(x, y int, o interface{}) Locator {
+	w.T(o, "w.PutIfEmpty(%d,%d)", x, y)
 	defer w.notifyUpdate()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	x, y = w.wrapCoords(x, y)
 
 	if !w.clearIfEmpty(x, y) {
 		return nil
 	}
 
-	return w.put(x, y, o)
+	l := w.put(x, y, o)
+	w.T(o, "- %v", l)
+	return l
 }
 
 // moveIfEmpty moves the given entity to its new coordinates.
@@ -337,12 +384,18 @@ func (w *World) moveIfEmpty(e *Entity, x, y int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	x, y = w.wrapCoords(x, y)
+
+	w.T(e, "clearIfEmpty(%d,%d)", x, y)
 	if !w.clearIfEmpty(x, y) {
+		w.T(e, "- not empty, returning false")
 		return false
 	}
+	w.T(e, "- success, (%d,%d)=nil, (%d,%d)=self", e.X, e.Y, x, y)
 
 	w.data[w.offset(e.X, e.Y)] = nil
 	w.data[w.offset(x, y)] = e
+	e.X, e.Y = x, y
 	return true
 }
 
@@ -419,5 +472,13 @@ func New(h, w int) *World {
 		Height: h,
 		Width:  w,
 		data:   make([]*Entity, h*w),
+	}
+}
+
+func (s *World) T(e interface{}, msg string, args ...interface{}) {
+	if s.Tracer != nil {
+		a := []interface{}{e}
+		a = append(a, args...)
+		fmt.Fprintf(s.Tracer, fmt.Sprintf("%%v: %s\n", msg), a...)
 	}
 }

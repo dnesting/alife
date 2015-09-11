@@ -117,7 +117,7 @@ func (o *BaseOrganism) Neighbor(s *sim.Sim) interface{} {
 // The energy of the original and new organisms will be split according to frac (1.0 = all available energy is given to the child).
 // no refers to the child organism, while nb refers to the embedded BaseOrganism within it.
 func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrganism) {
-	s.T(o, "divide(%d, %v)", frac, no)
+	s.T(o, "divide(%.2f, %v)", frac, no)
 	nb.Dir = rand.Intn(8)
 
 	if m, ok := no.(Mutable); ok {
@@ -130,12 +130,14 @@ func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrg
 	if l := o.Loc.PutIfEmpty(dx, dy, no); l != nil {
 		amt, e := o.AddEnergy(-s.BodyEnergy)
 		if e == 0 {
-			l.Replace(entities.NewFood(-amt))
+			l = l.Replace(entities.NewFood(-amt))
+			s.T(o, "- aborting: %v", l)
 		} else {
 			amt = -int(frac * float32(o.Energy()))
 			amt, _ = o.AddEnergy(amt)
 			no.AddEnergy(-amt)
 			nb.Loc = l
+			s.T(o, "- child: %v: %v", l, no)
 			if nr, ok := no.(sim.Runnable); ok {
 				s.Start(nr)
 			}
