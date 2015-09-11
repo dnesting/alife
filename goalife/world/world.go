@@ -36,6 +36,14 @@ func (e *Entity) String() string {
 	return fmt.Sprintf("(%d,%d)", e.X, e.Y)
 }
 
+func (e *Entity) invalidate() {
+	if e == nil {
+		return
+	}
+	e.X, e.Y = -1, -1
+	e.Invalid = true
+}
+
 func (e *Entity) checkValid() {
 	if e.Invalid {
 		panic(fmt.Sprintf("access attempted to invalidated entity %+v", e))
@@ -49,7 +57,6 @@ func (e *Entity) removeIfAt(x, y int) bool {
 	e.checkValid()
 	if e.X == x && e.Y == y {
 		e.W.remove(x, y)
-		e.Invalid = true
 		return true
 	}
 	return false
@@ -58,7 +65,7 @@ func (e *Entity) removeIfAt(x, y int) bool {
 func (e *Entity) checkLocationInvariant() {
 	x := e.W.At(e.X, e.Y)
 	if x != e {
-		panic(fmt.Sprintf("inconsistent location: %v vs %v", e, x))
+		panic(fmt.Sprintf("inconsistent location: %v vs %v@(%d,%d)", e, x, e.X, e.Y))
 	}
 }
 
@@ -260,16 +267,19 @@ func (w *World) put(x, y int, entity interface{}) *Entity {
 		Y: y,
 		V: entity,
 	}
-	w.data[w.offset(x, y)] = e
+	o := w.offset(x, y)
+	w.data[o].invalidate()
+	w.data[o] = e
 	return e
 }
 
 func (w *World) remove(x, y int) interface{} {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	old := w.data[w.offset(x, y)]
-	w.data[w.offset(x, y)] = nil
-	old.X, old.Y = -1, -1
+	o := w.offset(x, y)
+	old := w.data[o]
+	w.data[o] = nil
+	old.invalidate()
 	return old.Value()
 }
 

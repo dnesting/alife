@@ -33,7 +33,7 @@ const tracing = false
 // for a more pleasing visual representation of the organisms as
 // they move about. When this is false, a great many movements of the
 // organisms can occur between renderings.
-const syncUpdate = true
+const syncUpdate = false
 
 // ensureOrgs is the number of organisms we should attempt to maintain
 // in the world at all times. We will populate the world with randomly-
@@ -92,8 +92,7 @@ func resurrectOrg(s *sim.Sim) {
 }
 
 func ensureMinimumOrgs(s *sim.Sim, count int) {
-	//for i := count; i < ensureOrgs; i++ {
-	if count < ensureOrgs {
+	for i := count; i < ensureOrgs; i++ {
 		if rand.Float32() < fractionFromHistory {
 			resurrectOrg(s)
 		} else {
