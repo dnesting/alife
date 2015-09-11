@@ -25,7 +25,8 @@ import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
 
-const printWorld = false
+const printWorld = true
+const tracing = false
 
 // syncUpdate synchronizes an organism's execution until its last
 // operation gets rendered. This greatly slows execution, but allows
@@ -37,7 +38,7 @@ const syncUpdate = true
 // ensureOrgs is the number of organisms we should attempt to maintain
 // in the world at all times. We will populate the world with randomly-
 // generated organisms as needed.
-const ensureOrgs = 1
+const ensureOrgs = 50
 
 // initialEnergy is the energy that should be given to the organisms we
 // use to seed the world.
@@ -138,7 +139,9 @@ func main() {
 	s.MutateOnDivideProb = 0.01
 	s.BodyEnergy = 1000
 	s.SenseDistance = 10
-	s.Tracer = os.Stdout
+	if tracing {
+		s.Tracer = os.Stdout
+	}
 
 	// Use a Census instance to track the evolution of "genomes" over time.
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
