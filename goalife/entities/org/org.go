@@ -25,7 +25,6 @@ type Organism interface {
 
 	Forward(s *sim.Sim)
 
-	SetDir(dir int)
 	Right()
 	Left()
 
@@ -117,12 +116,6 @@ func (o *BaseOrganism) Neighbor(s *sim.Sim) interface{} {
 	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
 	s.T(o, "neighbor (%d,%d)", x, y)
 	return s.World.At(x, y)
-}
-
-// SetDir explicitly sets the direction of the organism to a given value.
-// Organisms should generally think in relative terms and use Right and Left instead.
-func (o *BaseOrganism) SetDir(dir int) {
-	o.Dir = dir
 }
 
 // Divide spawns the provided new organism at the given location.
