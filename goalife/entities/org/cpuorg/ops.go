@@ -20,6 +20,8 @@ func (o Op) String() string {
 
 var OpTable []Op
 
+var ErrDivisionByZero = errors.New("division by zero")
+
 func init() {
 	OpTable = []Op{
 		// 0
@@ -261,7 +263,7 @@ func OpMul(s *sim.Sim, o org.Organism, c *Cpu) error {
 
 func OpDiv(s *sim.Sim, o org.Organism, c *Cpu) error {
 	if c.R[1] == 0 {
-		return errors.New("division by zero")
+		return ErrDivisionByZero
 	}
 	c.R[0] = asUByte(c.R[0] / c.R[1])
 	return nil
@@ -283,6 +285,9 @@ func OpXor(s *sim.Sim, o org.Organism, c *Cpu) error {
 }
 
 func OpMod(s *sim.Sim, o org.Organism, c *Cpu) error {
+	if c.R[1] == 0 {
+		return ErrDivisionByZero
+	}
 	c.R[0] = asUByte(c.R[0] % c.R[1])
 	return nil
 }

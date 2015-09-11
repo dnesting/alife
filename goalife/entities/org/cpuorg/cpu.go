@@ -1,7 +1,5 @@
 package cpuorg
 
-import "strings"
-import "runtime/debug"
 import "fmt"
 import "errors"
 import "hash/crc32"
@@ -114,16 +112,6 @@ func (c *Cpu) findBackward(v int) int {
 // Step executes one CPU operation.  Any error or panic that occurs will result in an error
 // being returned.  Execution is expected to cease if an error is returned.
 func (c *Cpu) Step(s *sim.Sim, o org.Organism) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
-			if strings.Contains(err.Error(), "signal") {
-				debug.PrintStack()
-			}
-			s.T(o, "step panic: %v", err)
-		}
-	}()
-
 	op, ip := c.readOp()
 	c.Ip = ip
 	if op == nil {
