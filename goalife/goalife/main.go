@@ -10,11 +10,14 @@ package main
 import "encoding/gob"
 import "fmt"
 import "io/ioutil"
+import "log"
 import "math/rand"
+import "net/http"
 import "os"
 import "path"
 import "sync"
 import "time"
+import _ "net/http/pprof"
 
 import "github.com/dnesting/alife/goalife/entities"
 import "github.com/dnesting/alife/goalife/entities/org/cpuorg"
@@ -63,6 +66,9 @@ const autoSaveFilename = "autosave.dat"
 // autoSaveSecs is how often we will attempt to auto-save the world.
 const autoSaveSecs = 1
 
+// pprof determines whether to enable profiling
+const pprof = false
+
 func putRandomOrg(s *sim.Sim) {
 	o := cpuorg.Random()
 	o.AddEnergy(initialEnergy)
@@ -96,6 +102,12 @@ func ensureMinimumOrgs(s *sim.Sim, count int) {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+
+	if pprof {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+	}
 
 	// This just accumulates some notion of "progress" in the world, currently
 	// by counting the number of world-changing events (e.g., organism movement).
