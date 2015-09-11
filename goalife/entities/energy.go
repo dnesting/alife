@@ -1,6 +1,7 @@
 package entities
 
 import "fmt"
+import "sync"
 
 import "github.com/dnesting/alife/goalife/world"
 
@@ -15,7 +16,8 @@ type Energetic interface {
 // Battery is a simple implementation of Energetic that just stores a
 // count of available energy. Its value must never be set below zero.
 type Battery struct {
-	V int
+	V  int
+	mu sync.RWMutex
 }
 
 func (e *Battery) String() string {
@@ -24,6 +26,9 @@ func (e *Battery) String() string {
 
 // Energy returns the current amount of energy.
 func (e *Battery) Energy() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
 	return e.V
 }
 
@@ -32,6 +37,9 @@ func (e *Battery) Energy() int {
 // will never drop below zero.  Returns the actual amount of adjustment,
 // and the new energy level.
 func (e *Battery) AddEnergy(amt int) (int, int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	v := e.V + amt
 	nv := v
 	if nv < 0 {
