@@ -79,6 +79,11 @@ func (w *World) isEmpty(o Occupant) bool {
 	return w.emptyFn(o)
 }
 
+// Dimensions gives the width and height dimensions of the world.
+func (w *World) Dimensions() (int, int) {
+	return w.Width, w.Height
+}
+
 func modPos(v, max int) int {
 	v %= max
 	if v < 0 {
@@ -87,17 +92,19 @@ func modPos(v, max int) int {
 	return v
 }
 
-// Dimensions gives the width and height dimensions of the world.
-func (w *World) Dimensions() (int, int) {
-	return w.Width, w.Height
+// wrapCoords ensures the x and y coordinates are in-bounds
+func (w *World) wrapCoords(x, y int) (int, int) {
+	x = modPos(x, w.Width)
+	y = modPos(y, w.Height)
+
+	return x, y
 }
 
 // offset converts the (x, y) coordinates to a slice offset.  The given
 // coordinates can be outside of the (width, height) ranges for the world,
 // which will just result in the location wrapping around.
 func (w *World) offset(x, y int) int {
-	x = modPos(x, w.Width)
-	y = modPos(y, w.Height)
+	x, y = w.wrapCoords(x, y)
 	return modPos(y*w.Width+x, w.Height*w.Width)
 }
 
