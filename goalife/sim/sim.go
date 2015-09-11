@@ -72,6 +72,9 @@ func (s *Sim) Time() int64 {
 
 // Start begins executing the given Runnable, updating the Census as needed.
 func (s *Sim) Start(st Runnable) {
+	if s.IsStopped() {
+		return
+	}
 	s.wg.Add(1)
 	if g, ok := st.(census.Genomer); ok {
 		s.Census.Add(s.Time(), g.Genome())
