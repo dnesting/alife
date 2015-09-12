@@ -42,6 +42,8 @@ func (e *Entity) invalidate() {
 func (e *Entity) checkValid() {
 	if e.Invalid {
 		panic(fmt.Sprintf("access attempted to invalidated entity %+v", e))
+	} else if e.X < 0 || e.Y < 0 {
+		panic(fmt.Sprintf("invalid coordinates for valid entity (%d,%d)", e.X, e.Y))
 	}
 }
 
