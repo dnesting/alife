@@ -24,6 +24,7 @@ import "github.com/dnesting/alife/goalife/entities/org/cpuorg"
 import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
+import "github.com/dnesting/alife/goalife/world/text"
 
 const printWorld = true
 const tracing = false
