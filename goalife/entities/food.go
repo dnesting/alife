@@ -22,7 +22,19 @@ func NewFood(amt int) *Food {
 
 // Rune returns a fixed '.' rune to render a food pellet in the world.
 func (f *Food) Rune() rune {
-	return '.'
+	e := f.Energy()
+	switch {
+	case e > 4000:
+		return '⁙'
+	case e > 3000:
+		return '⁘'
+	case e > 2000:
+		return '⁖'
+	case e > 1000:
+		return '⁚'
+	default:
+		return '·'
+	}
 }
 
 // Consume consumes the given amt of energy, removing the food pellet from

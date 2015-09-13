@@ -297,45 +297,8 @@ func (w *World) Each(fn func(loc Locator)) {
 	}
 }
 
-// Printable is implemented by occupants that want to control how they are
-// presented on terminal-based renderings of the world.
-type Printable interface {
-	Rune() rune
-}
-
 func (w *World) String() string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	b := bytes.Buffer{}
-	headFoot := func() {
-		b.WriteString("+")
-		for x := 0; x < w.Width; x++ {
-			b.WriteString("-")
-		}
-		b.WriteString("+\n")
-	}
-
-	headFoot()
-	for y := 0; y < w.Height; y++ {
-		b.WriteString("|")
-		for x := 0; x < w.Width; x++ {
-			i := w.data[w.offset(x, y)]
-			if i == nil {
-				b.WriteString(" ")
-			} else {
-				switch i := i.Value().(type) {
-				case Printable:
-					b.WriteRune(i.Rune())
-				default:
-					b.WriteString("?")
-				}
-			}
-		}
-		b.WriteString("|\n")
-	}
-	headFoot()
-	return b.String()
+	return fmt.Sprintf("[world %dx%d]", w.Width, w.Height)
 }
 
 // New creates a World with the given dimensions.

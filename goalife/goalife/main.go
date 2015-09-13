@@ -24,6 +24,7 @@ import "github.com/dnesting/alife/goalife/entities/org/cpuorg"
 import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
+import "github.com/dnesting/alife/goalife/world/text"
 
 const printWorld = true
 const tracing = false
@@ -166,12 +167,8 @@ func main() {
 	fmt.Print("\033[H\033[2J")
 
 	// Start rendering updates to the screen periodically.
-	var screenUpdated *sync.Cond
-	var screenTicker *time.Ticker
-	if printWorld {
-		screenUpdated, screenTicker = startScreenUpdates(s, &frame, refreshHz)
-		defer screenTicker.Stop()
-	}
+	screenUpdated, screenTicker := startScreenUpdates(s, &frame, refreshHz)
+	defer screenTicker.Stop()
 
 	// Start auto-saving the world periodically.
 	// TODO(dnesting): This is broken because we can't use gob to save an array with nil values
@@ -188,7 +185,7 @@ func main() {
 		// update, meaning that organisms that performed a
 		// world-changing action won't get to do another
 		// one until their last action got rendered.
-		if syncUpdate && printWorld {
+		if syncUpdate {
 			screenUpdated.L.Lock()
 			defer screenUpdated.L.Unlock()
 			screenUpdated.Wait()
@@ -207,16 +204,22 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 
 	go func() {
 		for range ticker.C {
-			fmt.Print("\033[H")
-			fmt.Println(s.World)
-			fmt.Printf("update %d\n", *frame)
-			fmt.Printf("seen %d/%d (%d/%d species, %d recorded)     \n",
-				s.Census.Count(), s.Census.CountAllTime(),
-				s.Census.Distinct(), s.Census.DistinctAllTime(),
-				s.Census.NumRecorded)
-			x, y := s.World.Dimensions()
-			fmt.Printf("random: %+v\033[K\n",
-				s.World.At(rand.Intn(x), rand.Intn(y)))
+			if printWorld {
+				if !tracing {
+					fmt.Print("\033[H")
+				}
+				fmt.Println(text.WorldAsString(s.World))
+				fmt.Printf("update %d\n", *frame)
+				fmt.Printf("seen %d/%d (%d/%d species, %d recorded)     \n",
+					s.Census.Count(), s.Census.CountAllTime(),
+					s.Census.Distinct(), s.Census.DistinctAllTime(),
+					s.Census.NumRecorded)
+				x, y := s.World.Dimensions()
+				fmt.Printf("random: %+v\033[K\n",
+					s.World.At(rand.Intn(x), rand.Intn(y)))
+			} else if tracing {
+				fmt.Println("-- printed --")
+			}
 			if syncUpdate {
 				printed.Broadcast()
 			}
