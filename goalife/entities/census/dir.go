@@ -28,18 +28,18 @@ func NewDirCensus(dir string, threshold int) *DirCensus {
 	}
 }
 
-func (b *DirCensus) filename(c *Cohort) string {
+func (b *DirCensus) filename(c Cohort) string {
 	return path.Join(b.Dir, fmt.Sprintf("%d.%d", c.First, c.Genome.Hash()))
 }
 
 // PreviouslyRecorded returns true if the given Cohort was previously written to disk.
-func (b *DirCensus) PreviouslyRecorded(c *Cohort) bool {
+func (b *DirCensus) PreviouslyRecorded(c Cohort) bool {
 	_, err := os.Stat(b.filename(c))
 	return err == nil
 }
 
 // RecordInDir writes the given cohort to disk.
-func (b *DirCensus) RecordInDir(c *Cohort) error {
+func (b *DirCensus) RecordInDir(c Cohort) error {
 	f, err := os.Create(b.filename(c))
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func (b *DirCensus) Random() (*Cohort, error) {
 
 // Add indicates an instance of the given genome was added to the world,
 // possibly writing the Cohort to disk if it exceeds the DirCensus's threshold.
-func (b *DirCensus) Add(when int64, genome Genome) *Cohort {
+func (b *DirCensus) Add(when int64, genome Genome) Cohort {
 	c := b.MemCensus.Add(when, genome)
 
 	if c.Count >= b.threshold && !b.PreviouslyRecorded(c) && len(c.Genome.Code()) > 0 {
@@ -127,12 +127,10 @@ func (b *DirCensus) Add(when int64, genome Genome) *Cohort {
 // Add indicates an instance of the given genome was removed from the world,
 // possibly writing the Cohort to disk to record its last-seen information if
 // it was previously written there.
-func (b *DirCensus) Remove(when int64, genome Genome) *Cohort {
+func (b *DirCensus) Remove(when int64, genome Genome) Cohort {
 	c := b.MemCensus.Remove(when, genome)
 
 	if c.Count == 0 && b.PreviouslyRecorded(c) {
-		// Capture last frame info for extinct species
-		c.Last = when
 		b.RecordInDir(c)
 	}
 	return c

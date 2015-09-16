@@ -16,6 +16,7 @@ import "net/http"
 import "os"
 import "path"
 import "sync"
+import "sync/atomic"
 import "time"
 import _ "net/http/pprof"
 
@@ -141,12 +142,13 @@ func main() {
 	s.BodyEnergy = 1000
 	s.SenseDistance = 10
 	if tracing {
-		s.Tracer = os.Stdout
+		// s.Tracer = os.Stdout
+		w.Tracer = os.Stdout
 	}
 
 	// Use a Census instance to track the evolution of "genomes" over time.
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
-	s.Census.OnChange(func(b census.Census, _ *census.Cohort, _ bool) {
+	s.Census.OnChange(func(b census.Census, _ census.Cohort, _ bool) {
 		if !s.IsStopped() {
 			ensureMinimumOrgs(s, b.Count())
 		}
@@ -162,8 +164,10 @@ func main() {
 	// the census update gets triggered to get the rest added.
 	putRandomOrg(s)
 
-	// Clear the screen
-	fmt.Print("\033[H\033[2J")
+	if printWorld {
+		// Clear the screen
+		fmt.Print("\033[H\033[2J")
+	}
 
 	// Start rendering updates to the screen periodically.
 	screenUpdated, screenTicker := startScreenUpdates(s, &frame, refreshHz)
@@ -175,7 +179,7 @@ func main() {
 
 	// This is called every time the world changes somehow.
 	w.OnUpdate(func(w *world.World) {
-		frame += 1
+		atomic.AddInt64(&frame, 1)
 
 		// If we want synchronous renderings, we just block
 		// here until a rendering occurs. This effectively

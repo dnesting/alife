@@ -4,6 +4,7 @@ package world
 import "bytes"
 import "encoding/gob"
 import "fmt"
+import "io"
 import "math/rand"
 import "sync"
 
@@ -20,6 +21,7 @@ type World struct {
 	data     []Occupant
 	emptyFn  func(o Occupant) bool
 	updateFn func(w *World)
+	Tracer   io.Writer
 }
 
 func (w *World) GobEncode() ([]byte, error) {
@@ -258,5 +260,13 @@ func New(h, w int) *World {
 		Height: h,
 		Width:  w,
 		data:   make([]Occupant, h*w),
+	}
+}
+
+func (w *World) T(e interface{}, msg string, args ...interface{}) {
+	if w.Tracer != nil {
+		a := []interface{}{e}
+		a = append(a, args...)
+		fmt.Fprintf(w.Tracer, fmt.Sprintf("%%v: %s\n", msg), a...)
 	}
 }
