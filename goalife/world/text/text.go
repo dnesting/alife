@@ -80,14 +80,10 @@ func WorldAsString(w *world.World) string {
 	var points []point
 	m := make(map[point]rune)
 
-	w.Each(func(loc world.Locator) {
-		loc.WithLocation(func(x, y int, valid bool) {
-			if valid {
-				p := point{x, y}
-				m[p] = OccupantAsRune(loc.Value())
-				points = append(points, p)
-			}
-		})
+	w.EachLocation(func(x, y int, o interface{}) {
+		p := point{x, y}
+		m[p] = OccupantAsRune(o)
+		points = append(points, p)
 	})
 
 	sort.Sort(byCoordinate(points))

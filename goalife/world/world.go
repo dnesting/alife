@@ -121,13 +121,14 @@ func (w *World) get(x, y int) *Entity {
 	return w.data[w.offset(x, y)]
 }
 
-func (w *World) put(x, y int, entity interface{}) *Entity {
+func (w *World) put(x, y int, mu *sync.Mutex, entity interface{}) *Entity {
 	w.validateCoords(x, y)
 	e := &Entity{
-		W: w,
-		X: x,
-		Y: y,
-		V: entity,
+		W:  w,
+		X:  x,
+		Y:  y,
+		V:  entity,
+		mu: mu,
 	}
 	o := w.offset(x, y)
 	w.data[o].invalidate()
@@ -167,7 +168,7 @@ func (w *World) Put(x, y int, o interface{}) Locator {
 		return old.Replace(o)
 	}
 	defer w.mu.Unlock()
-	return w.put(x, y, o)
+	return w.put(x, y, &sync.Mutex{}, o)
 }
 
 // PlaceRandomly places an occupant in a random location, and returns
@@ -244,7 +245,7 @@ func (w *World) PutIfEmpty(x, y int, o interface{}) Locator {
 		return nil
 	}
 
-	l := w.put(x, y, o)
+	l := w.put(x, y, &sync.Mutex{}, o)
 	w.T(o, "- %v", l)
 	return l
 }
@@ -293,6 +294,17 @@ func (w *World) Each(fn func(loc Locator)) {
 	for i := 0; i < len(c.data); i++ {
 		if c.data[i] != nil {
 			fn(c.data[i])
+		}
+	}
+}
+
+func (w *World) EachLocation(fn func(x, y int, o interface{})) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	for i := 0; i < len(w.data); i++ {
+		o := w.data[i]
+		if o != nil {
+			fn(o.X, o.Y, o.Value())
 		}
 	}
 }
