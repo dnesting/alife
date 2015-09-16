@@ -33,12 +33,12 @@ func (c *Cohort) String() string {
 }
 
 // OnChangeCallback is a type used to communicate changes to the Census.
-type OnChangeCallback func(b Census, c *Cohort, added bool)
+type OnChangeCallback func(b Census, c Cohort, added bool)
 
 // Census is a type that is used to track changes in a world, grouped by Genome.
 type Census interface {
-	Add(when int64, genome Genome) *Cohort
-	Remove(when int64, genome Genome) *Cohort
+	Add(when int64, genome Genome) Cohort
+	Remove(when int64, genome Genome) Cohort
 	Count() int
 	CountAllTime() int
 	Distinct() int

@@ -5,6 +5,7 @@ import "errors"
 import "hash/crc32"
 import "math"
 import "math/rand"
+import "sync"
 
 import "github.com/dnesting/alife/goalife/entities/org"
 import "github.com/dnesting/alife/goalife/sim"
@@ -16,6 +17,7 @@ type Cpu struct {
 
 	R [4]int // Registers, described as A B C and D in the opcodes
 
+	mu     sync.Mutex
 	genome uint32 // Cache of the checksum of Code
 }
 
@@ -67,12 +69,18 @@ func (c *Cpu) Mutate() {
 
 // SetCode changes the Code slice used by this CPU.
 func (c *Cpu) SetCode(d []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.Code = d
 	c.genome = 0
 }
 
 // Genome returns the hash of the CPU's code, thus describing the "genome" of the organism.
 func (c *Cpu) Genome() uint32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.genome == 0 {
 		c.genome = crc32.ChecksumIEEE(c.Code)
 	}

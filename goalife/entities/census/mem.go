@@ -22,7 +22,7 @@ func NewMemCensus() *MemCensus {
 }
 
 // Add indicates an instance of the given genome was added to the world.
-func (b *MemCensus) Add(when int64, genome Genome) *Cohort {
+func (b *MemCensus) Add(when int64, genome Genome) (ret Cohort) {
 	var c *Cohort
 	func() {
 		b.mu.Lock()
@@ -43,15 +43,16 @@ func (b *MemCensus) Add(when int64, genome Genome) *Cohort {
 		c.Count += 1
 		b.count += 1
 		b.countAll += 1
+		ret = *c
 	}()
 	if b.onChange != nil {
-		b.onChange(b, c, true)
+		b.onChange(b, ret, true)
 	}
-	return c
+	return ret
 }
 
 // Remove indicates an instance of the given genome was removed from the world.
-func (b *MemCensus) Remove(when int64, genome Genome) *Cohort {
+func (b *MemCensus) Remove(when int64, genome Genome) (ret Cohort) {
 	var c *Cohort
 	func() {
 		b.mu.Lock()
@@ -64,12 +65,14 @@ func (b *MemCensus) Remove(when int64, genome Genome) *Cohort {
 		if c.Count == 0 {
 			delete(b.Seen, k)
 			b.distinct -= 1
+			c.Last = when
 		}
+		ret = *c
 	}()
 	if b.onChange != nil {
-		b.onChange(b, c, false)
+		b.onChange(b, ret, false)
 	}
-	return c
+	return ret
 }
 
 // Count returns the number of things presently tracked in the world.
