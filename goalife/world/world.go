@@ -239,12 +239,15 @@ func (w *World) Copy() *World {
 	}
 }
 
-// Each runs the given fn on each occupant in the world.
-func (w *World) Each(fn func(x, y int, o Occupant)) {
+// EachLocation runs the given fn on each occupant in the world.
+func (w *World) EachLocation(fn func(x, y int, o Occupant)) {
+	c := w.Copy()
 	for y := 0; y < w.Height; y++ {
 		for x := 0; x < w.Width; x++ {
-			if i := w.At(x, y); i != nil {
-				fn(x, y, i)
+			i := w.offset(x, y)
+			o := c.data[i]
+			if o != nil {
+				fn(x, y, o)
 			}
 		}
 	}

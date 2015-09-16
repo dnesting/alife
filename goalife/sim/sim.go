@@ -100,7 +100,7 @@ func (s *Sim) Run() {
 		defer s.mu.Unlock()
 		s.running = true
 	}()
-	s.World.Each(func(x, y int, o world.Occupant) {
+	s.World.EachLocation(func(x, y int, o world.Occupant) {
 		if st, ok := o.(Runnable); ok {
 			s.Start(st)
 		}

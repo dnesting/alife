@@ -80,7 +80,7 @@ func WorldAsString(w *world.World) string {
 	var points []point
 	m := make(map[point]rune)
 
-	w.Each(func(x, y int, o world.Occupant) {
+	w.EachLocation(func(x, y int, o world.Occupant) {
 		p := point{x, y}
 		m[p] = OccupantAsRune(o)
 		points = append(points, p)
