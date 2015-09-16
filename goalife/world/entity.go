@@ -8,6 +8,8 @@ package world
 // 4. To do (2) with multiple entities at once, you must first hold world.multi.
 
 import "fmt"
+import "os"
+import "runtime"
 import "sync"
 
 type Locator interface {
@@ -17,14 +19,17 @@ type Locator interface {
 	MoveIfEmpty(dx, dy int) bool
 	Remove()
 	Value() interface{}
+	WithLocation(fn func(x, y int, valid bool))
+	Valid() bool
 }
 
 type Entity struct {
-	mu      sync.Mutex
+	mu      *sync.Mutex
 	W       *World
 	X, Y    int
 	V       interface{}
 	Invalid bool
+	stack   []byte
 }
 
 func (e *Entity) String() string {
@@ -37,10 +42,20 @@ func (e *Entity) invalidate() {
 	}
 	e.X, e.Y = -1, -1
 	e.Invalid = true
+	e.stack = make([]byte, 4096)
+	runtime.Stack(e.stack, false)
+}
+
+func (e *Entity) Valid() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return !e.Invalid
 }
 
 func (e *Entity) checkValid() {
 	if e.Invalid {
+		fmt.Fprintf(os.Stderr, "%+v invalidated at:\n", e)
+		os.Stderr.Write(e.stack)
 		panic(fmt.Sprintf("access attempted to invalidated entity %+v", e))
 	} else if e.X < 0 || e.Y < 0 {
 		panic(fmt.Sprintf("invalid coordinates for valid entity (%d,%d)", e.X, e.Y))
@@ -51,7 +66,6 @@ func (e *Entity) removeIfAt(x, y int) bool {
 	e.W.T(e, "removeIfAt(%d,%d)", x, y)
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.checkValid()
 	if e.X == x && e.Y == y {
 		e.W.remove(x, y)
 		return true
@@ -84,7 +98,11 @@ func (e *Entity) Replace(n interface{}) Locator {
 	e.checkValid()
 	e.checkLocationInvariant()
 
-	loc := e.W.put(e.X, e.Y, n)
+	e.W.mu.Lock()
+	loc := e.W.put(e.X, e.Y, e.mu, n)
+	e.W.mu.Unlock()
+
+	e.W.T(e, "- with %v at (%d,%d)", loc, e.X, e.Y)
 	loc.checkLocationInvariant()
 	return loc
 }
@@ -143,4 +161,10 @@ func (e *Entity) Value() interface{} {
 		return e.V
 	}
 	return nil
+}
+
+func (e *Entity) WithLocation(fn func(x, y int, valid bool)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	fn(e.X, e.Y, !e.Invalid)
 }

@@ -27,7 +27,7 @@ import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
 import "github.com/dnesting/alife/goalife/world/text"
 
-const printWorld = true
+const printWorld = false
 const tracing = false
 
 // syncUpdate synchronizes an organism's execution until its last
