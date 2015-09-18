@@ -27,8 +27,8 @@ import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
 import "github.com/dnesting/alife/goalife/world/text"
 
-const printWorld = true
-const tracing = false
+const printWorld = false
+const tracing = true
 
 // syncUpdate synchronizes an organism's execution until its last
 // operation gets rendered. This greatly slows execution, but allows
@@ -142,7 +142,7 @@ func main() {
 	s.BodyEnergy = 1000
 	s.SenseDistance = 10
 	if tracing {
-		// s.Tracer = os.Stdout
+		//s.Tracer = os.Stdout
 		w.Tracer = os.Stdout
 	}
 
@@ -160,9 +160,7 @@ func main() {
 	w.PlaceRandomly(entities.NewFood(1000))
 	w.PlaceRandomly(entities.NewFood(1000))
 
-	// Start us off with one organism.  We need to explicitly add one so that
-	// the census update gets triggered to get the rest added.
-	putRandomOrg(s)
+	ensureMinimumOrgs(s, 0)
 
 	if printWorld {
 		// Clear the screen

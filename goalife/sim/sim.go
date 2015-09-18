@@ -101,8 +101,8 @@ func (s *Sim) Run() {
 		s.running = true
 	}()
 	s.World.Each(func(loc world.Locator) {
-		if st, ok := loc.Value().(Runnable); ok {
-			s.Start(st)
+		if r, ok := loc.Value().(Runnable); ok {
+			s.Start(r)
 		}
 	})
 	s.wg.Wait()
