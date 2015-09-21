@@ -3,8 +3,6 @@ package world
 
 // See comments in entity.go for rules around holding mutexes to avoid deadlock.
 
-import "bytes"
-import "encoding/gob"
 import "fmt"
 import "io"
 import "math/rand"
@@ -14,136 +12,83 @@ import "sync"
 // retrieving and manipulating items by their (x, y) coordinates.  It is implemented as
 // a toroidal 2D grid.
 type World struct {
-	Height, Width int
-
 	multi    sync.RWMutex
 	mu       sync.RWMutex
-	data     []*Entity
-	emptyFn  func(o interface{}) bool
-	updateFn func(w *World)
+	Grid     Grid
+	EmptyFn  func(o interface{}) bool
+	UpdateFn func(w *World)
 	Tracer   io.Writer
 }
 
 func (w *World) GobEncode() ([]byte, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	var b bytes.Buffer
-	enc := gob.NewEncoder(&b)
-	if err := enc.Encode(w.Height); err != nil {
-		return nil, err
-	}
-	if err := enc.Encode(w.Width); err != nil {
-		return nil, err
-	}
-	if err := enc.Encode(w.data); err != nil {
-		return nil, err
-	}
-	return b.Bytes(), nil
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.Grid.GobEncode()
 }
 
 func (w *World) GobDecode(stream []byte) error {
-	dec := gob.NewDecoder(bytes.NewReader(stream))
-	if err := dec.Decode(&w.Height); err != nil {
-		return err
-	}
-	if err := dec.Decode(&w.Width); err != nil {
-		return err
-	}
-	if err := dec.Decode(&w.data); err != nil {
-		return err
-	}
-	return nil
+	return w.Grid.GobDecode(stream)
 }
 
-// ConsiderEmpty allows the caller to specify a function used to determine if
-// a cell is "sufficiently empty" for the purposes of the IfEmpty functions.
-// This permits, for instance, placement of new organisms on top of food
-// pellets, while not permitting movement of organisms into the same cells.
-// The function should return true if the occupant of the cell can be
-// considered empty enough.
-func (w *World) ConsiderEmpty(fn func(o interface{}) bool) {
-	w.emptyFn = fn
+func (w *World) Wrap(x, y int) (int, int) {
+	return w.Grid.Wrap(x, y)
 }
 
-// OnUpdate specifies a func to be called every time a change to the world
-// occurs. Changes include placement, removal, or movement of an occupant.
-func (w *World) OnUpdate(fn func(w *World)) {
-	w.updateFn = fn
-}
-
-func (w *World) isEmpty(o interface{}) bool {
+func (w *World) isEmpty(o *Entity) (ok bool) {
+	defer func() { w.T(w, "isEmpty(%v) = %v", o, ok) }()
 	if o == nil {
+		w.T(w, "returning true because o == nil")
 		return true
 	}
-	if w.emptyFn == nil {
+	if w.EmptyFn == nil {
+		w.T(w, "returning false because w.EmptyFn == nil")
 		return false
 	}
-	return w.emptyFn(o)
+	w.T(w, "returning whatever EmptyFn returns")
+	return w.EmptyFn(o.Value())
 }
 
-// Dimensions gives the width and height dimensions of the world.
-func (w *World) Dimensions() (int, int) {
-	return w.Width, w.Height
+func (w *World) Width() int {
+	return w.Grid.Width()
 }
 
-func modPos(v, max int) int {
-	v %= max
-	if v < 0 {
-		v += max
-	}
-	return v
-}
-
-// wrapCoords ensures the x and y coordinates are in-bounds
-func (w *World) wrapCoords(x, y int) (int, int) {
-	x = modPos(x, w.Width)
-	y = modPos(y, w.Height)
-
-	return x, y
-}
-
-// offset converts the (x, y) coordinates to a slice offset.  The given
-// coordinates can be outside of the (width, height) ranges for the world,
-// which will just result in the location wrapping around.
-func (w *World) offset(x, y int) int {
-	x, y = w.wrapCoords(x, y)
-	return modPos(y*w.Width+x, w.Height*w.Width)
+func (w *World) Height() int {
+	return w.Grid.Height()
 }
 
 func (w *World) notifyUpdate() {
-	if w.updateFn != nil {
-		w.updateFn(w)
+	if w.UpdateFn != nil {
+		w.UpdateFn(w)
 	}
 }
 
-func (w *World) get(x, y int) *Entity {
-	return w.data[w.offset(x, y)]
+func (w *World) validateCoords(x, y int) {
+	if x >= w.Width() || y >= w.Height() || x < 0 || y < 0 {
+		panic(fmt.Sprintf("(%d, %d) outside of world bounds (%d, %d)", x, y, w.Width(), w.Height()))
+	}
 }
 
-func (w *World) put(x, y int, mu *sync.Mutex, entity interface{}) *Entity {
+func (w *World) createEntity(x, y int, mu *sync.Mutex, value interface{}) *Entity {
 	w.validateCoords(x, y)
-	e := &Entity{
+	if mu == nil {
+		mu = &sync.Mutex{}
+	}
+	return &Entity{
 		W:  w,
 		X:  x,
 		Y:  y,
-		V:  entity,
+		V:  value,
 		mu: mu,
 	}
-	o := w.offset(x, y)
-	w.data[o].invalidate()
-	w.data[o] = e
-	return e
 }
 
-func (w *World) remove(x, y int) interface{} {
+func (w *World) putEntityLocked(x, y int, mu *sync.Mutex, value interface{}) (e *Entity) {
+	defer func() { w.T(w, "putEntityLocked(%d,%d, %v, %v) = %v", x, y, mu, value, e) }()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	o := w.offset(x, y)
-	old := w.data[o]
-	w.data[o] = nil
-	old.invalidate()
-	return old.Value()
+	e = w.createEntity(x, y, mu, value)
+	w.Grid.Put(x, y, e)
+	return e
 }
 
 // at returns the occupant at the given (x, y) coordinate.  Concurrent
@@ -152,7 +97,118 @@ func (w *World) remove(x, y int) interface{} {
 func (w *World) At(x, y int) Locator {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.get(x, y)
+	l, _ := w.Grid.Get(x, y).(*Entity)
+	return l
+}
+
+func (w *World) removeEntityLocked(x, y int) (orig interface{}) {
+	defer func() { w.T(w, "removeEntityLocked(%d,%d) = %v", x, y, orig) }()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.Grid.Put(x, y, nil).(*Entity).Value()
+}
+
+func (w *World) putEntityIfEmpty(x, y int, e *Entity) (ok bool) {
+	defer func() { w.T(w, "putEntityIfEmpty(%d,%d, %v) = %v", x, y, e, ok) }()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	dest := w.getWithEntityLockLocked(x, y)
+	if dest != nil {
+		defer dest.mu.Unlock()
+	}
+	if !w.isEmpty(dest) {
+		w.T(w, "isEmpty(%v) at %d,%d is false", dest, x, y)
+		return false
+	}
+	dest.invalidate()
+	w.Grid.Put(x, y, e)
+	e.X = x
+	e.Y = y
+	return true
+}
+
+func (w *World) PutIfEmpty(x, y int, n interface{}) (loc Locator) {
+	defer func() { w.T(w, "PutIfEmpty(%d,%d, %v) = %v", x, y, n, loc) }()
+	e := w.createEntity(x, y, nil, n)
+	if w.putEntityIfEmpty(x, y, e) {
+		return e
+	}
+	return nil
+}
+
+func (w *World) moveIfEmptyEntityLocked(e *Entity, x, y int) (ok bool) {
+	defer func() { w.T(w, "moveIfEmptyEntityLocked(%v, %d,%d) = %v", e, x, y, ok) }()
+	ox, oy := e.X, e.Y
+	if w.putEntityIfEmpty(x, y, e) {
+		w.Grid.Put(ox, oy, nil)
+		return true
+	}
+	return false
+}
+
+func (w *World) getWithEntityLockLocked(x, y int) *Entity {
+	o := w.Grid.Get(x, y)
+	for {
+		if o == nil {
+			return nil
+		}
+		e := o.(*Entity)
+		w.mu.Unlock()
+		e.mu.Lock()
+		w.mu.Lock()
+		o := w.Grid.Get(x, y)
+		if e.X != x || e.Y != y || e != o {
+			e.mu.Unlock()
+			continue
+		}
+		return e
+	}
+}
+
+// PlaceRandomly places an occupant in a random location, and returns
+// the (x, y) coordinates where it was placed.  The occupant will not
+// be placed in a cell that's already occupied, unless the existing
+// occupant is considered "empty" by the ConsiderEmpty callback.
+func (w *World) PlaceRandomly(o interface{}) (loc Locator) {
+	defer func() { w.T(w, "PlaceRandomly(%v) = %v", o, loc) }()
+	for {
+		x, y := rand.Intn(w.Width()), rand.Intn(w.Height())
+		if loc := w.PutIfEmpty(x, y, o); loc != nil {
+			w.T(o, "w.PlaceRandomly = %v", loc)
+			return loc
+		}
+	}
+}
+
+/*
+func (w *World) withEntityLockLocked(x, y int, fn func(e *Entity)) {
+	e := w.getWithEntityLockLocked(x, y)
+	if e != nil {
+		defer e.Unlock()
+	}
+	fn(e)
+}
+
+func (w *World) putLockedIgnoreExisting(x, y int, mu *sync.Mutex, value interface{}) *Entity {
+	e := w.createEntity(x, y, mu, value)
+	w.Grid.Put(x, y, e)
+	return e
+}
+
+func (w *World) putEntityLocked(x, y int, mu *sync.Mutex, entity interface{}) *Entity {
+	e := w.createEntity(x, y, mu, value)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.putLockedIgnoreExisting(x, y, e)
+	return e
+}
+
+func (w *World) Remove(x, y int) (removed interface{}) {
+	defer func() { w.T(w, "Remove(%d,%d) = %v", x, y, removed) }()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.removeLocked(x, y, false)
 }
 
 // Put places an occupant (or nil) in a cell, unconditionally.  The
@@ -168,22 +224,7 @@ func (w *World) Put(x, y int, o interface{}) Locator {
 		return old.Replace(o)
 	}
 	defer w.mu.Unlock()
-	return w.put(x, y, &sync.Mutex{}, o)
-}
-
-// PlaceRandomly places an occupant in a random location, and returns
-// the (x, y) coordinates where it was placed.  The occupant will not
-// be placed in a cell that's already occupied, unless the existing
-// occupant is considered "empty" by the ConsiderEmpty callback.
-func (w *World) PlaceRandomly(o interface{}) Locator {
-	width, height := w.Dimensions()
-	for {
-		x, y := rand.Intn(width), rand.Intn(height)
-		if loc := w.PutIfEmpty(x, y, o); loc != nil {
-			w.T(o, "w.PlaceRandomly = %v", loc)
-			return loc
-		}
-	}
+	return w.putLocked(x, y, nil, o)
 }
 
 // clearIfEmpty clears (x,y) if possible and returns true, else returns false.
@@ -245,7 +286,7 @@ func (w *World) PutIfEmpty(x, y int, o interface{}) Locator {
 		return nil
 	}
 
-	l := w.put(x, y, &sync.Mutex{}, o)
+	l := w.putLockedIgnoreExisting(x, y, &sync.Mutex{}, o)
 	w.T(o, "- %v", l)
 	return l
 }
@@ -272,54 +313,42 @@ func (w *World) moveIfEmpty(e *Entity, x, y int) bool {
 	return true
 }
 
+*/
+
 // Copy returns a shallow copy of the world.
 func (w *World) Copy() *World {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	data := make([]*Entity, w.Height*w.Width)
-	copy(data, w.data)
-
 	return &World{
-		Height:  w.Height,
-		Width:   w.Width,
-		data:    data,
-		emptyFn: w.emptyFn,
+		Grid:    *w.Grid.Copy(),
+		EmptyFn: w.EmptyFn,
 	}
 }
 
 // Each runs the given fn on each occupant in the world.
 func (w *World) Each(fn func(loc Locator)) {
-	c := w.Copy()
-	for i := 0; i < len(c.data); i++ {
-		if c.data[i] != nil {
-			fn(c.data[i])
-		}
-	}
+	w.mu.RLock()
+	c := w.Grid.Copy()
+	w.mu.RUnlock()
+
+	c.Each(func(x, y int, o interface{}) {
+		fn(o.(Locator))
+	})
 }
 
 func (w *World) EachLocation(fn func(x, y int, o interface{})) {
 	w.mu.RLock()
-	defer w.mu.RUnlock()
-	for i := 0; i < len(w.data); i++ {
-		o := w.data[i]
-		if o != nil {
-			fn(o.X, o.Y, o.Value())
-		}
-	}
+	c := w.Grid.Copy()
+	w.mu.RUnlock()
+
+	c.Each(func(x, y int, o interface{}) {
+		fn(x, y, o.(Locator).Value())
+	})
 }
 
 func (w *World) String() string {
-	return fmt.Sprintf("[world %dx%d]", w.Width, w.Height)
-}
-
-// New creates a World with the given dimensions.
-func New(h, w int) *World {
-	return &World{
-		Height: h,
-		Width:  w,
-		data:   make([]*Entity, h*w),
-	}
+	return fmt.Sprintf("[world %v]", &w.Grid)
 }
 
 func (s *World) T(e interface{}, msg string, args ...interface{}) {
@@ -327,5 +356,12 @@ func (s *World) T(e interface{}, msg string, args ...interface{}) {
 		a := []interface{}{e}
 		a = append(a, args...)
 		fmt.Fprintf(s.Tracer, fmt.Sprintf("%%v: %s\n", msg), a...)
+	}
+}
+
+// New creates a World with the given dimensions.
+func New(w, h int) *World {
+	return &World{
+		Grid: *NewGrid(w, h),
 	}
 }

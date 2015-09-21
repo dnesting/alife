@@ -27,20 +27,20 @@ import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
 import "github.com/dnesting/alife/goalife/world/text"
 
-const printWorld = false
-const tracing = true
+const printWorld = true
+const tracing = false
 
 // syncUpdate synchronizes an organism's execution until its last
 // operation gets rendered. This greatly slows execution, but allows
 // for a more pleasing visual representation of the organisms as
 // they move about. When this is false, a great many movements of the
 // organisms can occur between renderings.
-const syncUpdate = false
+const syncUpdate = true
 
 // ensureOrgs is the number of organisms we should attempt to maintain
 // in the world at all times. We will populate the world with randomly-
 // generated organisms as needed.
-const ensureOrgs = 50
+const ensureOrgs = 5
 
 // initialEnergy is the energy that should be given to the organisms we
 // use to seed the world.
@@ -124,17 +124,17 @@ func main() {
 
 	// Otherwise instantiate a new world
 	if w == nil {
-		w = world.New(50, 200)
+		w = world.New(200, 50)
 	}
 
 	// We want to consider food pellets to be equivalent to an empty cell for
 	// the purposes of placing a new organism.
-	w.ConsiderEmpty(func(o interface{}) bool {
+	w.EmptyFn = func(o interface{}) bool {
 		if _, ok := o.(*entities.Food); ok {
 			return true
 		}
 		return false
-	})
+	}
 
 	// The Sim instance manages most aspects of the simulation.
 	s := sim.NewSim(w)
@@ -142,7 +142,7 @@ func main() {
 	s.BodyEnergy = 1000
 	s.SenseDistance = 10
 	if tracing {
-		//s.Tracer = os.Stdout
+		s.Tracer = os.Stdout
 		w.Tracer = os.Stdout
 	}
 
@@ -173,11 +173,11 @@ func main() {
 
 	// Start auto-saving the world periodically.
 	// TODO(dnesting): This is broken because we can't use gob to save an array with nil values
-	// autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
-	// defer autoSaveTicker.Stop()
+	autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
+	defer autoSaveTicker.Stop()
 
 	// This is called every time the world changes somehow.
-	w.OnUpdate(func(w *world.World) {
+	w.UpdateFn = func(w *world.World) {
 		atomic.AddInt64(&frame, 1)
 
 		// If we want synchronous renderings, we just block
@@ -191,7 +191,7 @@ func main() {
 			defer screenUpdated.L.Unlock()
 			screenUpdated.Wait()
 		}
-	})
+	}
 
 	s.Run()
 }
@@ -215,9 +215,9 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 					s.Census.Count(), s.Census.CountAllTime(),
 					s.Census.Distinct(), s.Census.DistinctAllTime(),
 					s.Census.NumRecorded)
-				x, y := s.World.Dimensions()
+				x, y := s.World.Width(), s.World.Height()
 				fmt.Printf("random: %+v\033[K\n",
-					s.World.At(rand.Intn(x), rand.Intn(y)))
+					s.World.At(rand.Intn(x), rand.Intn(y)).Value())
 			} else if tracing {
 				fmt.Println("-- printed --")
 			}
@@ -231,6 +231,7 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 }
 
 func registerGobTypes() {
+	gob.Register(&world.Entity{})
 	gob.Register(&entities.Food{})
 	gob.Register(&cpuorg.CpuOrganism{})
 }

@@ -2,6 +2,7 @@
 package text
 
 import "bytes"
+import "fmt"
 import "sort"
 
 import "github.com/dnesting/alife/goalife/world"
@@ -89,7 +90,7 @@ func WorldAsString(w *world.World) string {
 	sort.Sort(byCoordinate(points))
 
 	iy, ix := 0, -1
-	addHeader(&b, w.Width)
+	addHeader(&b, w.Width())
 
 	prev := point{-1, -1}
 	for _, p := range points {
@@ -97,14 +98,14 @@ func WorldAsString(w *world.World) string {
 			// Subtle race here could permit two of the same point
 			continue
 		}
-		fillBefore(&b, p.X, p.Y, w.Width, &ix, &iy)
+		fillBefore(&b, p.X, p.Y, w.Width(), &ix, &iy)
 		b.WriteRune(m[p])
 		ix += 1
 	}
-	fillBefore(&b, w.Width, w.Height-1, w.Width, &ix, &iy)
+	fillBefore(&b, w.Width(), w.Height()-1, w.Width(), &ix, &iy)
 	b.WriteRune(rightRune)
 	b.WriteRune('\n')
-	addFooter(&b, w.Width)
+	addFooter(&b, w.Width())
 	return b.String()
 }
 
@@ -117,6 +118,7 @@ func OccupantAsRune(o interface{}) rune {
 	case Printable:
 		return o.Rune()
 	default:
+		panic(fmt.Sprintf("unprintable: %v", o))
 		return '?'
 	}
 }

@@ -67,7 +67,10 @@ func (e *Entity) removeIfAt(x, y int) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.X == x && e.Y == y {
-		e.W.remove(x, y)
+		old := e.W.removeEntityLocked(x, y)
+		if old != e.Value() {
+			panic(fmt.Sprintf("removed (%d,%d) entity %v, expected %v", x, y, old, e))
+		}
 		return true
 	}
 	return false
@@ -87,7 +90,7 @@ func (e *Entity) Remove() {
 	defer e.mu.Unlock()
 	e.checkValid()
 	e.checkLocationInvariant()
-	e.W.remove(e.X, e.Y)
+	e.W.removeEntityLocked(e.X, e.Y)
 }
 
 func (e *Entity) Replace(n interface{}) Locator {
@@ -98,23 +101,22 @@ func (e *Entity) Replace(n interface{}) Locator {
 	e.checkValid()
 	e.checkLocationInvariant()
 
-	e.W.mu.Lock()
-	loc := e.W.put(e.X, e.Y, e.mu, n)
-	e.W.mu.Unlock()
+	ne := e.W.putEntityLocked(e.X, e.Y, e.mu, n)
 
-	e.W.T(e, "- with %v at (%d,%d)", loc, e.X, e.Y)
-	loc.checkLocationInvariant()
-	return loc
+	e.W.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
+	ne.checkLocationInvariant()
+	return ne
 }
 
 func (e *Entity) Relative(dx, dy int) Locator {
-	// Rule (3): e.w.At only needs the world lock.
+	// Rule (3): e.w.Get only needs the world lock.
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.checkValid()
 	e.checkLocationInvariant()
 
-	l := e.W.At(e.X+dx, e.Y+dy)
+	x, y := e.W.Wrap(e.X+dx, e.Y+dy)
+	l := e.W.At(x, y)
 	e.W.T(e, "Relative(%d,%d) = %v", dx, dy, l)
 	return l
 }
@@ -130,7 +132,8 @@ func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 	e.checkValid()
 	e.checkLocationInvariant()
 
-	l := e.W.PutIfEmpty(e.X+dx, e.Y+dy, n)
+	x, y := e.W.Wrap(e.X+dx, e.Y+dy)
+	l := e.W.PutIfEmpty(x, y, n)
 	if l, ok := l.(*Entity); ok {
 		l.checkLocationInvariant()
 	}
@@ -150,10 +153,12 @@ func (e *Entity) MoveIfEmpty(dx, dy int) bool {
 	e.checkValid()
 	e.checkLocationInvariant()
 
-	l := e.W.moveIfEmpty(e, e.X+dx, e.Y+dy)
+	x, y := e.W.Wrap(e.X+dx, e.Y+dy)
+
+	ok := e.W.moveIfEmptyEntityLocked(e, x, y)
 	e.checkLocationInvariant()
-	e.W.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, l)
-	return l
+	e.W.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
+	return ok
 }
 
 func (e *Entity) Value() interface{} {
