@@ -162,6 +162,7 @@ func (e *Entity) Relative(dx, dy int) Locator {
 }
 
 func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
+	defer e.w.notifyUpdate()
 	// Rule (4): e.w.PutIfEmpty may end up replacing an existing
 	// entity, so we need to grab the multi lock.
 	e.w.mu.Lock()

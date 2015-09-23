@@ -135,6 +135,7 @@ func (w *World) putEntityIfEmpty(x, y int, e *Entity) (ok bool) {
 }
 
 func (w *World) PutIfEmpty(x, y int, n interface{}) (loc Locator) {
+	defer w.notifyUpdate()
 	defer func() { w.T(w, "PutIfEmpty(%d,%d, %v) = %v", x, y, n, loc) }()
 	w.mu.Lock()
 	defer w.mu.Unlock()
