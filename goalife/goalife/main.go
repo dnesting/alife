@@ -40,7 +40,7 @@ const syncUpdate = true
 // ensureOrgs is the number of organisms we should attempt to maintain
 // in the world at all times. We will populate the world with randomly-
 // generated organisms as needed.
-const ensureOrgs = 5
+const ensureOrgs = 50
 
 // initialEnergy is the energy that should be given to the organisms we
 // use to seed the world.

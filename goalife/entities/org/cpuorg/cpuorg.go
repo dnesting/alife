@@ -39,7 +39,7 @@ func (g CpuOrgGenome) Code() []string {
 }
 
 func (o *CpuOrganism) String() string {
-	return fmt.Sprintf("[org (%s) e=%d g=%d %v]", o.BaseOrganism.Loc, o.Energy(), o.Cpu.Genome(), &o.Cpu)
+	return fmt.Sprintf("[org (%s) e=%d g=%d %v]", o.BaseOrganism.Locator(), o.Energy(), o.Cpu.Genome(), &o.Cpu)
 }
 
 // Genome returns a census.Genome corresponding to this organism.

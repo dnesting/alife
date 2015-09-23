@@ -12,12 +12,24 @@ import "sync"
 // retrieving and manipulating items by their (x, y) coordinates.  It is implemented as
 // a toroidal 2D grid.
 type World struct {
-	multi    sync.RWMutex
 	mu       sync.RWMutex
 	Grid     Grid
 	EmptyFn  func(o interface{}) bool
 	UpdateFn func(w *World)
 	Tracer   io.Writer
+}
+
+func (w *World) get(x, y int) *Entity {
+	var e *Entity
+	o := w.Grid.Get(x, y)
+	if o != nil {
+		e = o.(*Entity)
+	}
+	return e
+}
+
+type Worldly interface {
+	UseWorld(w *World)
 }
 
 func (w *World) GobEncode() ([]byte, error) {
@@ -27,7 +39,15 @@ func (w *World) GobEncode() ([]byte, error) {
 }
 
 func (w *World) GobDecode(stream []byte) error {
-	return w.Grid.GobDecode(stream)
+	if err := w.Grid.GobDecode(stream); err != nil {
+		return err
+	}
+	w.Grid.Each(func(x, y int, v interface{}) {
+		if o, ok := v.(Worldly); ok {
+			o.UseWorld(w)
+		}
+	})
+	return nil
 }
 
 func (w *World) Wrap(x, y int) (int, int) {
@@ -68,25 +88,19 @@ func (w *World) validateCoords(x, y int) {
 	}
 }
 
-func (w *World) createEntity(x, y int, mu *sync.Mutex, value interface{}) *Entity {
+func (w *World) createEntity(x, y int, value interface{}) *Entity {
 	w.validateCoords(x, y)
-	if mu == nil {
-		mu = &sync.Mutex{}
-	}
 	return &Entity{
-		W:  w,
-		X:  x,
-		Y:  y,
-		V:  value,
-		mu: mu,
+		w: w,
+		X: x,
+		Y: y,
+		v: value,
 	}
 }
 
-func (w *World) putEntityLocked(x, y int, mu *sync.Mutex, value interface{}) (e *Entity) {
-	defer func() { w.T(w, "putEntityLocked(%d,%d, %v, %v) = %v", x, y, mu, value, e) }()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	e = w.createEntity(x, y, mu, value)
+func (w *World) putEntityLocked(x, y int, value interface{}) (e *Entity) {
+	defer func() { w.T(w, "putEntityLocked(%d,%d, %v) = %v", x, y, value, e) }()
+	e = w.createEntity(x, y, value)
 	w.Grid.Put(x, y, e)
 	return e
 }
@@ -97,26 +111,18 @@ func (w *World) putEntityLocked(x, y int, mu *sync.Mutex, value interface{}) (e 
 func (w *World) At(x, y int) Locator {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	l, _ := w.Grid.Get(x, y).(*Entity)
-	return l
+	return w.get(x, y)
 }
 
 func (w *World) removeEntityLocked(x, y int) (orig interface{}) {
 	defer func() { w.T(w, "removeEntityLocked(%d,%d) = %v", x, y, orig) }()
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	return w.Grid.Put(x, y, nil).(*Entity).Value()
 }
 
 func (w *World) putEntityIfEmpty(x, y int, e *Entity) (ok bool) {
 	defer func() { w.T(w, "putEntityIfEmpty(%d,%d, %v) = %v", x, y, e, ok) }()
-	w.mu.Lock()
-	defer w.mu.Unlock()
 
-	dest := w.getWithEntityLockLocked(x, y)
-	if dest != nil {
-		defer dest.mu.Unlock()
-	}
+	dest := w.get(x, y)
 	if !w.isEmpty(dest) {
 		w.T(w, "isEmpty(%v) at %d,%d is false", dest, x, y)
 		return false
@@ -130,7 +136,15 @@ func (w *World) putEntityIfEmpty(x, y int, e *Entity) (ok bool) {
 
 func (w *World) PutIfEmpty(x, y int, n interface{}) (loc Locator) {
 	defer func() { w.T(w, "PutIfEmpty(%d,%d, %v) = %v", x, y, n, loc) }()
-	e := w.createEntity(x, y, nil, n)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return w.putIfEmptyLocked(x, y, n)
+}
+
+func (w *World) putIfEmptyLocked(x, y int, n interface{}) (loc Locator) {
+	defer func() { w.T(w, "PutIfEmpty(%d,%d, %v) = %v", x, y, n, loc) }()
+	e := w.createEntity(x, y, n)
 	if w.putEntityIfEmpty(x, y, e) {
 		return e
 	}
@@ -145,25 +159,6 @@ func (w *World) moveIfEmptyEntityLocked(e *Entity, x, y int) (ok bool) {
 		return true
 	}
 	return false
-}
-
-func (w *World) getWithEntityLockLocked(x, y int) *Entity {
-	o := w.Grid.Get(x, y)
-	for {
-		if o == nil {
-			return nil
-		}
-		e := o.(*Entity)
-		w.mu.Unlock()
-		e.mu.Lock()
-		w.mu.Lock()
-		o := w.Grid.Get(x, y)
-		if e.X != x || e.Y != y || e != o {
-			e.mu.Unlock()
-			continue
-		}
-		return e
-	}
 }
 
 // PlaceRandomly places an occupant in a random location, and returns

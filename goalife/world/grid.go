@@ -68,7 +68,7 @@ func (d *Grid) Get(x, y int) interface{} {
 
 func (d *Grid) Put(x, y int, o interface{}) (orig interface{}) {
 	i := d.offset(x, y)
-	orig = d.data[i]
+	orig = d.Get(x, y)
 	d.data[i] = o
 	return
 }
@@ -76,9 +76,7 @@ func (d *Grid) Put(x, y int, o interface{}) (orig interface{}) {
 func (d *Grid) Each(fn func(x, y int, value interface{})) {
 	for y := 0; y < d.height; y++ {
 		for x := 0; x < d.width; x++ {
-			i := y*d.width + x
-			o := d.data[i]
-			if o != nil {
+			if o := d.Get(x, y); o != nil {
 				fn(x, y, o)
 			}
 		}
@@ -119,8 +117,13 @@ func (d *Grid) GobEncode() ([]byte, error) {
 	d.Each(func(x, y int, v interface{}) {
 		items = append(items, gobItem{x, y, v})
 	})
-	if err := enc.Encode(items); err != nil {
+	if err := enc.Encode(len(items)); err != nil {
 		return nil, err
+	}
+	for _, i := range items {
+		if err := enc.Encode(i); err != nil {
+			return nil, err
+		}
 	}
 	return b.Bytes(), nil
 }
@@ -134,12 +137,17 @@ func (d *Grid) GobDecode(stream []byte) error {
 		return err
 	}
 	d.data = make([]interface{}, d.width*d.height)
-	var items []gobItem
-	if err := dec.Decode(&items); err != nil {
+	var numItems int
+	if err := dec.Decode(&numItems); err != nil {
 		return err
 	}
-	for _, i := range items {
+	for numItems > 0 {
+		var i gobItem
+		if err := dec.Decode(&i); err != nil {
+			return err
+		}
 		d.Put(i.X, i.Y, i.V)
+		numItems--
 	}
 	return nil
 }

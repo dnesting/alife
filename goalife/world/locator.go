@@ -7,7 +7,9 @@ package world
 // 3. It is permissible to perform (1) only after (2).  It is illegal to lock entity.mu while holding world.mu.
 // 4. To do (2) with multiple entities at once, you must first hold world.multi.
 
+import "bytes"
 import "fmt"
+import "encoding/gob"
 import "os"
 import "runtime"
 import "sync"
@@ -19,17 +21,58 @@ type Locator interface {
 	MoveIfEmpty(dx, dy int) bool
 	Remove()
 	Value() interface{}
-	WithLocation(fn func(x, y int, valid bool))
 	Valid() bool
 }
 
+type Locatable interface {
+	UseLocator(l Locator)
+}
+
 type Entity struct {
-	mu      *sync.Mutex
-	W       *World
-	X, Y    int
-	V       interface{}
+	// These are protected by W.mu
+	X, Y int
+	v    interface{}
+	w    *World
+
+	mu      sync.Mutex
 	Invalid bool
 	stack   []byte
+}
+
+func (e *Entity) GobEncode() ([]byte, error) {
+	var b bytes.Buffer
+	enc := gob.NewEncoder(&b)
+	if err := enc.Encode(e.X); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(e.Y); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(&e.v); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func (e *Entity) GobDecode(stream []byte) error {
+	dec := gob.NewDecoder(bytes.NewReader(stream))
+	if err := dec.Decode(&e.X); err != nil {
+		return err
+	}
+	if err := dec.Decode(&e.Y); err != nil {
+		return err
+	}
+	if err := dec.Decode(&e.v); err != nil {
+		return err
+	}
+	if l, ok := e.v.(Locatable); ok {
+		l.UseLocator(e)
+	}
+	return nil
+}
+
+func (e *Entity) UseWorld(w *World) {
+	e.w = w
 }
 
 func (e *Entity) String() string {
@@ -40,7 +83,6 @@ func (e *Entity) invalidate() {
 	if e == nil {
 		return
 	}
-	e.X, e.Y = -1, -1
 	e.Invalid = true
 	e.stack = make([]byte, 4096)
 	runtime.Stack(e.stack, false)
@@ -52,7 +94,7 @@ func (e *Entity) Valid() bool {
 	return !e.Invalid
 }
 
-func (e *Entity) checkValid() {
+func (e *Entity) checkValidLocked() {
 	if e.Invalid {
 		fmt.Fprintf(os.Stderr, "%+v invalidated at:\n", e)
 		os.Stderr.Write(e.stack)
@@ -63,11 +105,9 @@ func (e *Entity) checkValid() {
 }
 
 func (e *Entity) removeIfAt(x, y int) bool {
-	e.W.T(e, "removeIfAt(%d,%d)", x, y)
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.w.T(e, "removeIfAt(%d,%d)", x, y)
 	if e.X == x && e.Y == y {
-		old := e.W.removeEntityLocked(x, y)
+		old := e.w.removeEntityLocked(x, y)
 		if old != e.Value() {
 			panic(fmt.Sprintf("removed (%d,%d) entity %v, expected %v", x, y, old, e))
 		}
@@ -77,99 +117,89 @@ func (e *Entity) removeIfAt(x, y int) bool {
 }
 
 func (e *Entity) checkLocationInvariant() {
-	x := e.W.At(e.X, e.Y)
+	x := e.w.get(e.X, e.Y)
 	if x != e {
 		panic(fmt.Sprintf("inconsistent location: %v vs %v@(%d,%d)", e, x, e.X, e.Y))
 	}
 }
 
 func (e *Entity) Remove() {
-	e.W.T(e, "Remove")
-	defer e.W.notifyUpdate()
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.checkValid()
+	e.w.T(e, "Remove")
+	defer e.w.notifyUpdate()
+	e.w.mu.Lock()
+	defer e.w.mu.Unlock()
+	e.checkValidLocked()
 	e.checkLocationInvariant()
-	e.W.removeEntityLocked(e.X, e.Y)
+	e.w.removeEntityLocked(e.X, e.Y)
 }
 
 func (e *Entity) Replace(n interface{}) Locator {
-	e.W.T(e, "Replace(%v)", n)
-	defer e.W.notifyUpdate()
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.checkValid()
+	e.w.T(e, "Replace(%v)", n)
+	defer e.w.notifyUpdate()
+	e.w.mu.Lock()
+	defer e.w.mu.Unlock()
+	e.checkValidLocked()
 	e.checkLocationInvariant()
 
-	ne := e.W.putEntityLocked(e.X, e.Y, e.mu, n)
+	ne := e.w.putEntityLocked(e.X, e.Y, n)
 
-	e.W.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
+	e.w.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
 	ne.checkLocationInvariant()
 	return ne
 }
 
 func (e *Entity) Relative(dx, dy int) Locator {
 	// Rule (3): e.w.Get only needs the world lock.
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.checkValid()
+	e.w.mu.Lock()
+	defer e.w.mu.Unlock()
+	e.checkValidLocked()
 	e.checkLocationInvariant()
 
-	x, y := e.W.Wrap(e.X+dx, e.Y+dy)
-	l := e.W.At(x, y)
-	e.W.T(e, "Relative(%d,%d) = %v", dx, dy, l)
+	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
+	l := e.w.get(x, y)
+	e.w.T(e, "Relative(%d,%d) = %v", dx, dy, l)
 	return l
 }
 
 func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 	// Rule (4): e.w.PutIfEmpty may end up replacing an existing
 	// entity, so we need to grab the multi lock.
-	e.W.multi.Lock()
-	defer e.W.multi.Unlock()
+	e.w.mu.Lock()
+	defer e.w.mu.Unlock()
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.checkValid()
+	e.checkValidLocked()
 	e.checkLocationInvariant()
 
-	x, y := e.W.Wrap(e.X+dx, e.Y+dy)
-	l := e.W.PutIfEmpty(x, y, n)
+	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
+	l := e.w.putIfEmptyLocked(x, y, n)
 	if l, ok := l.(*Entity); ok {
 		l.checkLocationInvariant()
 	}
-	e.W.T(e, "PutIfEmpty(%d,%d, %v)", dx, dy, n)
+	e.w.T(e, "PutIfEmpty(%d,%d, %v)", dx, dy, n)
 	return l
 }
 
 func (e *Entity) MoveIfEmpty(dx, dy int) bool {
-	defer e.W.notifyUpdate()
+	defer e.w.notifyUpdate()
 	// Rule (4): e.w.moveIfEmpty may end up replacing an existing
 	// entity, so we need to grab the multi lock.
-	e.W.multi.Lock()
-	defer e.W.multi.Unlock()
+	e.w.mu.Lock()
+	defer e.w.mu.Unlock()
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.checkValid()
+	e.checkValidLocked()
 	e.checkLocationInvariant()
 
-	x, y := e.W.Wrap(e.X+dx, e.Y+dy)
+	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
 
-	ok := e.W.moveIfEmptyEntityLocked(e, x, y)
+	ok := e.w.moveIfEmptyEntityLocked(e, x, y)
 	e.checkLocationInvariant()
-	e.W.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
+	e.w.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
 	return ok
 }
 
 func (e *Entity) Value() interface{} {
 	if e != nil {
-		return e.V
+		return e.v
 	}
 	return nil
-}
-
-func (e *Entity) WithLocation(fn func(x, y int, valid bool)) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	fn(e.X, e.Y, !e.Invalid)
 }
