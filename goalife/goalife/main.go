@@ -35,7 +35,7 @@ const tracing = false
 // for a more pleasing visual representation of the organisms as
 // they move about. When this is false, a great many movements of the
 // organisms can occur between renderings.
-const syncUpdate = true
+const syncUpdate = false
 
 // ensureOrgs is the number of organisms we should attempt to maintain
 // in the world at all times. We will populate the world with randomly-
@@ -93,14 +93,33 @@ func resurrectOrg(s *sim.Sim) {
 	}
 }
 
-func ensureMinimumOrgs(s *sim.Sim, count int) {
-	for i := count; i < ensureOrgs; i++ {
+func ensureMinimumOrgs(s *sim.Sim) {
+	for c := s.Census.Count(); c < ensureOrgs; c++ {
 		if rand.Float32() < fractionFromHistory {
 			resurrectOrg(s)
 		} else {
 			putRandomOrg(s)
 		}
 	}
+}
+
+func initWorld(w *world.World) {
+	// We want to consider food pellets to be equivalent to an empty cell for
+	// the purposes of placing a new organism.
+	w.EmptyFn = func(o interface{}) bool {
+		if _, ok := o.(*entities.Food); ok {
+			return true
+		}
+		return false
+	}
+}
+
+func startAll(s *sim.Sim, w *world.World) {
+	w.EachLocation(func(x, y int, v interface{}) {
+		if r, ok := v.(sim.Runnable); ok {
+			s.Start(r)
+		}
+	})
 }
 
 func main() {
@@ -125,15 +144,13 @@ func main() {
 	// Otherwise instantiate a new world
 	if w == nil {
 		w = world.New(200, 50)
-	}
+		initWorld(w)
 
-	// We want to consider food pellets to be equivalent to an empty cell for
-	// the purposes of placing a new organism.
-	w.EmptyFn = func(o interface{}) bool {
-		if _, ok := o.(*entities.Food); ok {
-			return true
-		}
-		return false
+		// Just for fun
+		w.PlaceRandomly(entities.NewFood(1000))
+		w.PlaceRandomly(entities.NewFood(1000))
+		w.PlaceRandomly(entities.NewFood(1000))
+		w.PlaceRandomly(entities.NewFood(1000))
 	}
 
 	// The Sim instance manages most aspects of the simulation.
@@ -150,17 +167,12 @@ func main() {
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
 	s.Census.OnChange(func(b census.Census, _ census.Cohort, _ bool) {
 		if !s.IsStopped() {
-			ensureMinimumOrgs(s, b.Count())
+			ensureMinimumOrgs(s)
 		}
 	})
 
-	// Just for fun
-	w.PlaceRandomly(entities.NewFood(1000))
-	w.PlaceRandomly(entities.NewFood(1000))
-	w.PlaceRandomly(entities.NewFood(1000))
-	w.PlaceRandomly(entities.NewFood(1000))
-
-	ensureMinimumOrgs(s, 0)
+	startAll(s, w)
+	ensureMinimumOrgs(s)
 
 	if printWorld {
 		// Clear the screen
@@ -276,6 +288,7 @@ func restoreWorld(frame *int64) (*world.World, error) {
 	registerGobTypes()
 	dec := gob.NewDecoder(f)
 	w := &world.World{}
+	initWorld(w)
 	if err := dec.Decode(w); err != nil {
 		return nil, err
 	}

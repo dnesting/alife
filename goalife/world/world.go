@@ -28,7 +28,7 @@ func (w *World) get(x, y int) *Entity {
 	return e
 }
 
-type Worldly interface {
+type worldly interface {
 	UseWorld(w *World)
 }
 
@@ -43,7 +43,7 @@ func (w *World) GobDecode(stream []byte) error {
 		return err
 	}
 	w.Grid.Each(func(x, y int, v interface{}) {
-		if o, ok := v.(Worldly); ok {
+		if o, ok := v.(worldly); ok {
 			o.UseWorld(w)
 		}
 	})
@@ -175,140 +175,6 @@ func (w *World) PlaceRandomly(o interface{}) (loc Locator) {
 		}
 	}
 }
-
-/*
-func (w *World) withEntityLockLocked(x, y int, fn func(e *Entity)) {
-	e := w.getWithEntityLockLocked(x, y)
-	if e != nil {
-		defer e.Unlock()
-	}
-	fn(e)
-}
-
-func (w *World) putLockedIgnoreExisting(x, y int, mu *sync.Mutex, value interface{}) *Entity {
-	e := w.createEntity(x, y, mu, value)
-	w.Grid.Put(x, y, e)
-	return e
-}
-
-func (w *World) putEntityLocked(x, y int, mu *sync.Mutex, entity interface{}) *Entity {
-	e := w.createEntity(x, y, mu, value)
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.putLockedIgnoreExisting(x, y, e)
-	return e
-}
-
-func (w *World) Remove(x, y int) (removed interface{}) {
-	defer func() { w.T(w, "Remove(%d,%d) = %v", x, y, removed) }()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.removeLocked(x, y, false)
-}
-
-// Put places an occupant (or nil) in a cell, unconditionally.  The
-// existing occupant, if any, is returned.
-func (w *World) Put(x, y int, o interface{}) Locator {
-	w.T(o, "w.Put(%d,%d)", x, y)
-	defer w.notifyUpdate()
-	w.mu.Lock()
-
-	if old := w.get(x, y); old != nil {
-		w.mu.Unlock()
-		w.T(o, "- replacing %v", old)
-		return old.Replace(o)
-	}
-	defer w.mu.Unlock()
-	return w.putLocked(x, y, nil, o)
-}
-
-// clearIfEmpty clears (x,y) if possible and returns true, else returns false.
-// Requires holding w.mu.
-func (w *World) clearIfEmpty(x, y int) bool {
-	// Concurrency rule (3) means we must give up w.mu before having the entity
-	// being cleared remove itself.  Because this happens, there's a race where
-	// another goroutine could do something with the entity in that cell, so we
-	// enter a loop and have the entity double-check that it's in the same cell
-	// we expect it to be in before removing it.
-	count := 0
-	w.validateCoords(x, y)
-	for {
-		old := w.get(x, y)
-		if old == nil {
-			// cell is empty, maintain w.mu and we'll just move pointers around
-			break
-		}
-
-		if w.isEmpty(old.Value()) {
-			// cell is occupied but needs to be replaced, so have the locator
-			// remove itself without holding w.mu and we'll grab w.mu again
-			// when it's done.
-			w.mu.Unlock()
-			removed := old.removeIfAt(x, y)
-			w.mu.Lock()
-			if removed {
-				return true
-			}
-		} else {
-			// cell is not empty, so fail the move operation
-			return false
-		}
-		count++
-		if count > 100 {
-			panic(fmt.Sprintf("stuck trying to clear (%d,%d), most recently got %v: %v", x, y, old, old.Value()))
-		}
-	}
-	return true
-}
-
-func (w *World) validateCoords(x, y int) {
-	if x >= w.Width || y >= w.Height || x < 0 || y < 0 {
-		panic(fmt.Sprintf("(%d, %d) outside of world bounds (%d, %d)", x, y, w.Width, w.Height))
-	}
-}
-
-// PutIfEmpty places an occupant in a given location, but only if the
-// location is empty, or considered "empty" by the ConsiderEmpty callback.
-func (w *World) PutIfEmpty(x, y int, o interface{}) Locator {
-	w.T(o, "w.PutIfEmpty(%d,%d)", x, y)
-	defer w.notifyUpdate()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	x, y = w.wrapCoords(x, y)
-
-	if !w.clearIfEmpty(x, y) {
-		return nil
-	}
-
-	l := w.putLockedIgnoreExisting(x, y, &sync.Mutex{}, o)
-	w.T(o, "- %v", l)
-	return l
-}
-
-// moveIfEmpty moves the given entity to its new coordinates.
-// Requires that e.mu already be held.  If (x, y) is occupied but "empty",
-// the entity there will be removed.  Returns true if the move occurred.
-func (w *World) moveIfEmpty(e *Entity, x, y int) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	x, y = w.wrapCoords(x, y)
-
-	w.T(e, "clearIfEmpty(%d,%d)", x, y)
-	if !w.clearIfEmpty(x, y) {
-		w.T(e, "- not empty, returning false")
-		return false
-	}
-	w.T(e, "- success, (%d,%d)=nil, (%d,%d)=self", e.X, e.Y, x, y)
-
-	w.data[w.offset(e.X, e.Y)] = nil
-	w.data[w.offset(x, y)] = e
-	e.X, e.Y = x, y
-	return true
-}
-
-*/
 
 // Copy returns a shallow copy of the world.
 func (w *World) Copy() *World {
