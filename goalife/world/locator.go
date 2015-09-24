@@ -104,17 +104,20 @@ func (e *Entity) checkValidLocked() {
 	}
 }
 
+/*
 func (e *Entity) removeIfAt(x, y int) bool {
 	e.w.T(e, "removeIfAt(%d,%d)", x, y)
 	if e.X == x && e.Y == y {
-		old := e.w.removeEntityLocked(x, y)
+		old := e.w.removeLocked(x, y)
 		if old != e.Value() {
 			panic(fmt.Sprintf("removed (%d,%d) entity %v, expected %v", x, y, old, e))
 		}
+		e.invalidate()
 		return true
 	}
 	return false
 }
+*/
 
 func (e *Entity) checkLocationInvariant() {
 	x := e.w.get(e.X, e.Y)
@@ -130,7 +133,8 @@ func (e *Entity) Remove() {
 	defer e.w.mu.Unlock()
 	e.checkValidLocked()
 	e.checkLocationInvariant()
-	e.w.removeEntityLocked(e.X, e.Y)
+	e.w.removeLocked(e.X, e.Y)
+	e.invalidate()
 }
 
 func (e *Entity) Replace(n interface{}) Locator {
@@ -141,7 +145,7 @@ func (e *Entity) Replace(n interface{}) Locator {
 	e.checkValidLocked()
 	e.checkLocationInvariant()
 
-	ne := e.w.putEntityLocked(e.X, e.Y, n)
+	ne := e.w.putLocked(e.X, e.Y, n)
 
 	e.w.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
 	ne.checkLocationInvariant()
@@ -192,7 +196,7 @@ func (e *Entity) MoveIfEmpty(dx, dy int) bool {
 
 	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
 
-	ok := e.w.moveIfEmptyEntityLocked(e, x, y)
+	ok := e.w.moveIfEmptyLocked(e, x, y)
 	e.checkLocationInvariant()
 	e.w.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
 	return ok

@@ -98,8 +98,8 @@ func (w *World) createEntity(x, y int, value interface{}) *Entity {
 	}
 }
 
-func (w *World) putEntityLocked(x, y int, value interface{}) (e *Entity) {
-	defer func() { w.T(w, "putEntityLocked(%d,%d, %v) = %v", x, y, value, e) }()
+func (w *World) putLocked(x, y int, value interface{}) (e *Entity) {
+	defer func() { w.T(w, "putLocked(%d,%d, %v) = %v", x, y, value, e) }()
 	e = w.createEntity(x, y, value)
 	w.Grid.Put(x, y, e)
 	return e
@@ -114,8 +114,8 @@ func (w *World) At(x, y int) Locator {
 	return w.get(x, y)
 }
 
-func (w *World) removeEntityLocked(x, y int) (orig interface{}) {
-	defer func() { w.T(w, "removeEntityLocked(%d,%d) = %v", x, y, orig) }()
+func (w *World) removeLocked(x, y int) (orig interface{}) {
+	defer func() { w.T(w, "removeLocked(%d,%d) = %v", x, y, orig) }()
 	return w.Grid.Put(x, y, nil).(*Entity).Value()
 }
 
@@ -152,8 +152,8 @@ func (w *World) putIfEmptyLocked(x, y int, n interface{}) (loc Locator) {
 	return nil
 }
 
-func (w *World) moveIfEmptyEntityLocked(e *Entity, x, y int) (ok bool) {
-	defer func() { w.T(w, "moveIfEmptyEntityLocked(%v, %d,%d) = %v", e, x, y, ok) }()
+func (w *World) moveIfEmptyLocked(e *Entity, x, y int) (ok bool) {
+	defer func() { w.T(w, "moveIfEmptyLocked(%v, %d,%d) = %v", e, x, y, ok) }()
 	ox, oy := e.X, e.Y
 	if w.putEntityIfEmpty(x, y, e) {
 		w.Grid.Put(ox, oy, nil)
