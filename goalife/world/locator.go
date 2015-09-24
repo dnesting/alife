@@ -10,7 +10,6 @@ package world
 import "bytes"
 import "fmt"
 import "encoding/gob"
-import "os"
 import "runtime"
 import "sync"
 
@@ -94,6 +93,7 @@ func (e *Entity) Valid() bool {
 	return !e.Invalid
 }
 
+/*
 func (e *Entity) checkValidLocked() {
 	if e.Invalid {
 		fmt.Fprintf(os.Stderr, "%+v invalidated at:\n", e)
@@ -103,6 +103,7 @@ func (e *Entity) checkValidLocked() {
 		panic(fmt.Sprintf("invalid coordinates for valid entity (%d,%d)", e.X, e.Y))
 	}
 }
+*/
 
 /*
 func (e *Entity) removeIfAt(x, y int) bool {
@@ -131,10 +132,11 @@ func (e *Entity) Remove() {
 	defer e.w.notifyUpdate()
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
-	e.checkValidLocked()
-	e.checkLocationInvariant()
-	e.w.removeLocked(e.X, e.Y)
-	e.invalidate()
+	if !e.Invalid {
+		e.checkLocationInvariant()
+		e.w.removeLocked(e.X, e.Y)
+		e.invalidate()
+	}
 }
 
 func (e *Entity) Replace(n interface{}) Locator {
@@ -142,27 +144,30 @@ func (e *Entity) Replace(n interface{}) Locator {
 	defer e.w.notifyUpdate()
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
-	e.checkValidLocked()
-	e.checkLocationInvariant()
+	if !e.Invalid {
+		e.checkLocationInvariant()
 
-	ne := e.w.putLocked(e.X, e.Y, n)
+		ne := e.w.putLocked(e.X, e.Y, n)
 
-	e.w.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
-	ne.checkLocationInvariant()
-	return ne
+		e.w.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
+		ne.checkLocationInvariant()
+		return ne
+	}
+	return nil
 }
 
 func (e *Entity) Relative(dx, dy int) Locator {
 	// Rule (3): e.w.Get only needs the world lock.
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
-	e.checkValidLocked()
-	e.checkLocationInvariant()
-
-	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
-	l := e.w.get(x, y)
-	e.w.T(e, "Relative(%d,%d) = %v", dx, dy, l)
-	return l
+	if !e.Invalid {
+		e.checkLocationInvariant()
+		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
+		l := e.w.get(x, y)
+		e.w.T(e, "Relative(%d,%d) = %v", dx, dy, l)
+		return l
+	}
+	return nil
 }
 
 func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
@@ -172,16 +177,18 @@ func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
 
-	e.checkValidLocked()
-	e.checkLocationInvariant()
+	if !e.Invalid {
+		e.checkLocationInvariant()
 
-	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
-	l := e.w.putIfEmptyLocked(x, y, n)
-	if l, ok := l.(*Entity); ok {
-		l.checkLocationInvariant()
+		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
+		l := e.w.putIfEmptyLocked(x, y, n)
+		if l, ok := l.(*Entity); ok {
+			l.checkLocationInvariant()
+		}
+		e.w.T(e, "PutIfEmpty(%d,%d, %v)", dx, dy, n)
+		return l
 	}
-	e.w.T(e, "PutIfEmpty(%d,%d, %v)", dx, dy, n)
-	return l
+	return nil
 }
 
 func (e *Entity) MoveIfEmpty(dx, dy int) bool {
@@ -191,15 +198,17 @@ func (e *Entity) MoveIfEmpty(dx, dy int) bool {
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
 
-	e.checkValidLocked()
-	e.checkLocationInvariant()
+	if !e.Invalid {
+		e.checkLocationInvariant()
 
-	x, y := e.w.Wrap(e.X+dx, e.Y+dy)
+		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
 
-	ok := e.w.moveIfEmptyLocked(e, x, y)
-	e.checkLocationInvariant()
-	e.w.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
-	return ok
+		ok := e.w.moveIfEmptyLocked(e, x, y)
+		e.checkLocationInvariant()
+		e.w.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
+		return ok
+	}
+	return false
 }
 
 func (e *Entity) Value() interface{} {

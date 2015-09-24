@@ -70,7 +70,7 @@ const autoSaveFilename = "autosave.dat"
 const autoSaveSecs = 1
 
 // pprof determines whether to enable profiling
-const pprof = false
+const pprof = true
 
 func putRandomOrg(s *sim.Sim) {
 	o := cpuorg.Random()
