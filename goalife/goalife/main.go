@@ -222,7 +222,7 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 					fmt.Print("\033[H")
 				}
 				fmt.Println(text.WorldAsString(s.World))
-				fmt.Printf("update %d\n", *frame)
+				fmt.Printf("update %d, steps %d\n", *frame, cpuorg.StepCount())
 				fmt.Printf("seen %d/%d (%d/%d species, %d recorded)     \n",
 					s.Census.Count(), s.Census.CountAllTime(),
 					s.Census.Distinct(), s.Census.DistinctAllTime(),

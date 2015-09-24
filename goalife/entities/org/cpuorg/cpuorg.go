@@ -6,6 +6,7 @@ import "fmt"
 import "hash/crc32"
 import "math/rand"
 import "runtime"
+import "sync/atomic"
 
 import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/entities/org"
@@ -22,6 +23,12 @@ type CpuOrgGenome struct {
 	hash       uint32
 	code       []byte
 	decompiled []string
+}
+
+var stepCount int64 = 0
+
+func StepCount() int64 {
+	return atomic.LoadInt64(&stepCount)
 }
 
 func (g CpuOrgGenome) Hash() uint32 {
@@ -75,6 +82,7 @@ func FromCode(code []string) *CpuOrganism {
 // instruction will be returned, at which point the organism is not expected to continue
 // executing.
 func (o *CpuOrganism) Step(s *sim.Sim) error {
+	atomic.AddInt64(&stepCount, 1)
 	if err := o.Cpu.Step(s, o); err != nil {
 		return err
 	}
