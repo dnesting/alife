@@ -7,6 +7,7 @@ import "math/rand"
 
 import "github.com/dnesting/alife/goalife/entities"
 import "github.com/dnesting/alife/goalife/sim"
+import "github.com/dnesting/alife/goalife/world"
 
 // SenseFilter is used to determine if an item that occupies a cell during a Sense operation
 // should contribute to the aggregated energy value for that operation.
@@ -24,7 +25,6 @@ type Organism interface {
 	entities.Energetic
 
 	Forward(s *sim.Sim)
-
 	Right()
 	Left()
 
@@ -36,64 +36,67 @@ type Organism interface {
 }
 
 // BaseOrganism encompasses the non-functional elements of an organism, including its
-// energy level, orientation and position in the world.
+// energy level and orientation.
 type BaseOrganism struct {
 	entities.Battery
-	Dir  int
-	X, Y int
+	Dir int
+	loc world.Locator
+}
+
+func (o *BaseOrganism) UseLocator(l world.Locator) {
+	o.loc = l
+}
+
+func (o *BaseOrganism) Locator() world.Locator {
+	return o.loc
 }
 
 func (o *BaseOrganism) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("[baseorg (%d,%d)", o.X, o.Y))
+	b.WriteString(fmt.Sprintf("[baseorg (%s)", o.loc))
 	b.WriteString(fmt.Sprintf(" e=%d", o.Energy()))
 	b.WriteString(fmt.Sprintf(" dir=%d", o.Dir))
 	b.WriteString("]")
 	return b.String()
 }
 
-// resolveDir returns the (x, y) coordinates starting from the given (x, y) coordinates
-// translated in the given direction the given number of spaces.  The returned coordinates
-// do not wrap and may be negative.
-func resolveDir(x, y, dir, dist int) (int, int) {
+// delta returns the (dx, dy) coordinate delta from the given direction and distance.
+func delta(dir, dist int) (int, int) {
 	switch dir {
 	case 0:
-		return x, y - dist
+		return 0, -dist
 	case 1:
-		return x + dist, y - dist
+		return dist, -dist
 	case 2:
-		return x + dist, y
+		return dist, 0
 	case 3:
-		return x + dist, y + dist
+		return dist, dist
 	case 4:
-		return x, y + dist
+		return 0, dist
 	case 5:
-		return x - dist, y + dist
+		return -dist, dist
 	case 6:
-		return x - dist, y
+		return -dist, 0
 	case 7:
-		return x - dist, y - dist
+		return -dist, -dist
 	default:
-		panic(fmt.Sprintf("resolveDir with out-of-range dir=%d", dir))
+		panic(fmt.Sprintf("delta with out-of-range dir=%d", dir))
 	}
 }
 
 // PlaceRandomly places the given organism at a random location in the world.
 // The given Organism (n) must embed the receiver.
 func (o *BaseOrganism) PlaceRandomly(s *sim.Sim, n Organism) {
-	o.X, o.Y = s.World.PlaceRandomly(n)
-	s.T(n, "placed at: (%d,%d)", o.X, o.Y)
+	o.loc = s.World.PlaceRandomly(n)
+	s.T(n, "placed at: %v", o.loc)
 }
 
 // Forward moves the organism forward one spot if it is unoccupied. If it is
 // occupied, no effect occurs.
 func (o *BaseOrganism) Forward(s *sim.Sim) {
 	s.T(o, "forward")
-	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
-	if s.World.MoveIfEmpty(o.X, o.Y, x, y) == nil {
-		o.X = x
-		o.Y = y
-	}
+	dx, dy := delta(o.Dir, 1)
+	o.loc.MoveIfEmpty(dx, dy)
 }
 
 // Right turns the organism one direction to the right.
@@ -113,16 +116,16 @@ func (o *BaseOrganism) Left() {
 // Neighbor returns the occupant of the cell directly ahead.
 // If the cell has no occupant, returns nil.
 func (o *BaseOrganism) Neighbor(s *sim.Sim) interface{} {
-	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
-	s.T(o, "neighbor (%d,%d)", x, y)
-	return s.World.At(x, y)
+	dx, dy := delta(o.Dir, 1)
+	s.T(o, "neighbor (%d,%d)", dx, dy)
+	return o.loc.Relative(dx, dy).Value()
 }
 
 // Divide spawns the provided new organism at the given location.
 // The energy of the original and new organisms will be split according to frac (1.0 = all available energy is given to the child).
 // no refers to the child organism, while nb refers to the embedded BaseOrganism within it.
 func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrganism) {
-	s.T(o, "divide(%d, %v)", frac, no)
+	s.T(o, "divide(%.2f, %v)", frac, no)
 	nb.Dir = rand.Intn(8)
 
 	if m, ok := no.(Mutable); ok {
@@ -131,17 +134,18 @@ func (o *BaseOrganism) Divide(s *sim.Sim, frac float32, no Organism, nb *BaseOrg
 		}
 	}
 
-	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
-	if s.World.PutIfEmpty(x, y, no) == nil {
+	dx, dy := delta(o.Dir, 1)
+	if l := o.loc.PutIfEmpty(dx, dy, no); l != nil {
 		amt, e := o.AddEnergy(-s.BodyEnergy)
 		if e == 0 {
-			s.World.Put(x, y, entities.NewFood(-amt))
+			l = l.Replace(entities.NewFood(-amt))
+			s.T(o, "- aborting: %v", l)
 		} else {
 			amt = -int(frac * float32(o.Energy()))
 			amt, _ = o.AddEnergy(amt)
 			no.AddEnergy(-amt)
-			nb.X = x
-			nb.Y = y
+			nb.loc = l
+			s.T(o, "- child: %v: %v", l, no)
 			if nr, ok := no.(sim.Runnable); ok {
 				s.Start(nr)
 			}
@@ -158,8 +162,8 @@ func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
 	s.T(o, "sense")
 	result := 0.0
 	for dist := 1; dist <= s.SenseDistance; dist++ {
-		x, y := resolveDir(o.X, o.Y, o.Dir, dist)
-		if occ := s.World.At(x, y); occ != nil {
+		dx, dy := delta(o.Dir, dist)
+		if occ := o.loc.Relative(dx, dy).Value(); occ != nil {
 			if e, ok := occ.(entities.Energetic); ok {
 				mult := 1.0
 				if filterFn != nil {
@@ -177,19 +181,17 @@ func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
 // this function is called.
 func (o *BaseOrganism) Die(s *sim.Sim, n Organism, reason string) {
 	s.T(o, "dying: %s", reason)
-	s.World.Put(o.X, o.Y, entities.NewFood(o.Energy()+s.BodyEnergy))
-	//fmt.Printf("%v (%v) dying: %s\n", o, x, reason)
+	o.loc.Replace(entities.NewFood(o.Energy() + s.BodyEnergy))
 }
 
 // EatNeighbor consumes at most amt of energy from the neighbor directly ahead.
 // If the neighbor does not implement Energetic, no effect occurs.
 func (o *BaseOrganism) EatNeighbor(s *sim.Sim, amt int) {
-	x, y := resolveDir(o.X, o.Y, o.Dir, 1)
-	s.T(o, "eat (%d) (%d,%d)", amt, x, y)
-	if n := s.World.At(x, y); n != nil {
-		if e, ok := n.(entities.Energetic); ok {
-			act := e.Consume(s.World, x, y, amt)
-			o.AddEnergy(act)
+	dx, dy := delta(o.Dir, 1)
+	s.T(o, "eat (%d) (%d,%d)", amt, dx, dy)
+	if nloc := o.loc.Relative(dx, dy); nloc != nil {
+		if e, ok := nloc.Value().(entities.Energetic); ok {
+			o.AddEnergy(e.Consume(nloc, amt))
 		}
 	}
 }

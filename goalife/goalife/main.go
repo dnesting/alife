@@ -35,7 +35,7 @@ const tracing = false
 // for a more pleasing visual representation of the organisms as
 // they move about. When this is false, a great many movements of the
 // organisms can occur between renderings.
-const syncUpdate = true
+const syncUpdate = false
 
 // ensureOrgs is the number of organisms we should attempt to maintain
 // in the world at all times. We will populate the world with randomly-
@@ -70,7 +70,7 @@ const autoSaveFilename = "autosave.dat"
 const autoSaveSecs = 1
 
 // pprof determines whether to enable profiling
-const pprof = false
+const pprof = true
 
 func putRandomOrg(s *sim.Sim) {
 	o := cpuorg.Random()
@@ -93,8 +93,8 @@ func resurrectOrg(s *sim.Sim) {
 	}
 }
 
-func ensureMinimumOrgs(s *sim.Sim, count int) {
-	for i := count; i < ensureOrgs; i++ {
+func ensureMinimumOrgs(s *sim.Sim) {
+	for c := s.Census.Count(); c < ensureOrgs; c++ {
 		if rand.Float32() < fractionFromHistory {
 			resurrectOrg(s)
 		} else {
@@ -103,12 +103,31 @@ func ensureMinimumOrgs(s *sim.Sim, count int) {
 	}
 }
 
+func initWorld(w *world.World) {
+	// We want to consider food pellets to be equivalent to an empty cell for
+	// the purposes of placing a new organism.
+	w.EmptyFn = func(o interface{}) bool {
+		if _, ok := o.(*entities.Food); ok {
+			return true
+		}
+		return false
+	}
+}
+
+func startAll(s *sim.Sim, w *world.World) {
+	w.EachLocation(func(x, y int, v interface{}) {
+		if r, ok := v.(sim.Runnable); ok {
+			s.Start(r)
+		}
+	})
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	if pprof {
 		go func() {
-			log.Println(http.ListenAndServe("localhost:6060", nil))
+			log.Println(http.ListenAndServe("0.0.0.0:6060", nil))
 		}()
 	}
 
@@ -124,17 +143,15 @@ func main() {
 
 	// Otherwise instantiate a new world
 	if w == nil {
-		w = world.New(50, 200)
-	}
+		w = world.New(200, 50)
+		initWorld(w)
 
-	// We want to consider food pellets to be equivalent to an empty cell for
-	// the purposes of placing a new organism.
-	w.ConsiderEmpty(func(o world.Occupant) bool {
-		if _, ok := o.(*entities.Food); ok {
-			return true
-		}
-		return false
-	})
+		// Just for fun
+		w.PlaceRandomly(entities.NewFood(1000))
+		w.PlaceRandomly(entities.NewFood(1000))
+		w.PlaceRandomly(entities.NewFood(1000))
+		w.PlaceRandomly(entities.NewFood(1000))
+	}
 
 	// The Sim instance manages most aspects of the simulation.
 	s := sim.NewSim(w)
@@ -142,7 +159,7 @@ func main() {
 	s.BodyEnergy = 1000
 	s.SenseDistance = 10
 	if tracing {
-		// s.Tracer = os.Stdout
+		s.Tracer = os.Stdout
 		w.Tracer = os.Stdout
 	}
 
@@ -150,19 +167,12 @@ func main() {
 	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
 	s.Census.OnChange(func(b census.Census, _ census.Cohort, _ bool) {
 		if !s.IsStopped() {
-			ensureMinimumOrgs(s, b.Count())
+			ensureMinimumOrgs(s)
 		}
 	})
 
-	// Just for fun
-	w.PlaceRandomly(entities.NewFood(1000))
-	w.PlaceRandomly(entities.NewFood(1000))
-	w.PlaceRandomly(entities.NewFood(1000))
-	w.PlaceRandomly(entities.NewFood(1000))
-
-	// Start us off with one organism.  We need to explicitly add one so that
-	// the census update gets triggered to get the rest added.
-	putRandomOrg(s)
+	startAll(s, w)
+	ensureMinimumOrgs(s)
 
 	if printWorld {
 		// Clear the screen
@@ -174,11 +184,12 @@ func main() {
 	defer screenTicker.Stop()
 
 	// Start auto-saving the world periodically.
+	// TODO(dnesting): This is broken because we can't use gob to save an array with nil values
 	autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
 	defer autoSaveTicker.Stop()
 
 	// This is called every time the world changes somehow.
-	w.OnUpdate(func(w *world.World) {
+	w.UpdateFn = func(w *world.World) {
 		atomic.AddInt64(&frame, 1)
 
 		// If we want synchronous renderings, we just block
@@ -192,7 +203,7 @@ func main() {
 			defer screenUpdated.L.Unlock()
 			screenUpdated.Wait()
 		}
-	})
+	}
 
 	s.Run()
 }
@@ -211,14 +222,14 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 					fmt.Print("\033[H")
 				}
 				fmt.Println(text.WorldAsString(s.World))
-				fmt.Printf("update %d\n", *frame)
+				fmt.Printf("update %d, steps %d\n", *frame, cpuorg.StepCount())
 				fmt.Printf("seen %d/%d (%d/%d species, %d recorded)     \n",
 					s.Census.Count(), s.Census.CountAllTime(),
 					s.Census.Distinct(), s.Census.DistinctAllTime(),
 					s.Census.NumRecorded)
-				x, y := s.World.Dimensions()
+				x, y := s.World.Width(), s.World.Height()
 				fmt.Printf("random: %+v\033[K\n",
-					s.World.At(rand.Intn(x), rand.Intn(y)))
+					s.World.At(rand.Intn(x), rand.Intn(y)).Value())
 			} else if tracing {
 				fmt.Println("-- printed --")
 			}
@@ -232,6 +243,7 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 }
 
 func registerGobTypes() {
+	gob.Register(&world.Entity{})
 	gob.Register(&entities.Food{})
 	gob.Register(&cpuorg.CpuOrganism{})
 }
@@ -276,6 +288,7 @@ func restoreWorld(frame *int64) (*world.World, error) {
 	registerGobTypes()
 	dec := gob.NewDecoder(f)
 	w := &world.World{}
+	initWorld(w)
 	if err := dec.Decode(w); err != nil {
 		return nil, err
 	}

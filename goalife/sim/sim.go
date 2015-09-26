@@ -30,6 +30,7 @@ type Sim struct {
 
 	Tracer io.Writer
 
+	pending []Runnable
 	mu      sync.RWMutex
 	wg      sync.WaitGroup
 	running bool
@@ -72,13 +73,18 @@ func (s *Sim) Time() int64 {
 
 // Start begins executing the given Runnable, updating the Census as needed.
 func (s *Sim) Start(st Runnable) {
-	if s.IsStopped() {
-		return
-	}
 	s.wg.Add(1)
 	if g, ok := st.(census.Genomer); ok {
 		s.Census.Add(s.Time(), g.Genome())
 	}
+	if s.IsStopped() {
+		s.pending = append(s.pending, st)
+	} else {
+		s.startRunning(st)
+	}
+}
+
+func (s *Sim) startRunning(st Runnable) {
 	go func() {
 		defer s.wg.Done()
 		if g, ok := st.(census.Genomer); ok {
@@ -99,12 +105,11 @@ func (s *Sim) Run() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.running = true
-	}()
-	s.World.EachLocation(func(x, y int, o world.Occupant) {
-		if st, ok := o.(Runnable); ok {
-			s.Start(st)
+		for _, r := range s.pending {
+			s.startRunning(r)
 		}
-	})
+		s.pending = nil
+	}()
 	s.wg.Wait()
 }
 

@@ -2,6 +2,7 @@
 package text
 
 import "bytes"
+import "fmt"
 import "sort"
 
 import "github.com/dnesting/alife/goalife/world"
@@ -76,11 +77,11 @@ func (p byCoordinate) Less(i, j int) bool {
 func (p byCoordinate) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func WorldAsString(w *world.World) string {
-	b := bytes.Buffer{}
+	var b bytes.Buffer
 	var points []point
 	m := make(map[point]rune)
 
-	w.EachLocation(func(x, y int, o world.Occupant) {
+	w.EachLocation(func(x, y int, o interface{}) {
 		p := point{x, y}
 		m[p] = OccupantAsRune(o)
 		points = append(points, p)
@@ -89,17 +90,22 @@ func WorldAsString(w *world.World) string {
 	sort.Sort(byCoordinate(points))
 
 	iy, ix := 0, -1
-	addHeader(&b, w.Width)
+	addHeader(&b, w.Width())
 
+	prev := point{-1, -1}
 	for _, p := range points {
-		fillBefore(&b, p.X, p.Y, w.Width, &ix, &iy)
+		if p == prev {
+			// Subtle race here could permit two of the same point
+			continue
+		}
+		fillBefore(&b, p.X, p.Y, w.Width(), &ix, &iy)
 		b.WriteRune(m[p])
 		ix += 1
 	}
-	fillBefore(&b, w.Width, w.Height-1, w.Width, &ix, &iy)
+	fillBefore(&b, w.Width(), w.Height()-1, w.Width(), &ix, &iy)
 	b.WriteRune(rightRune)
 	b.WriteRune('\n')
-	addFooter(&b, w.Width)
+	addFooter(&b, w.Width())
 	return b.String()
 }
 
@@ -112,6 +118,7 @@ func OccupantAsRune(o interface{}) rune {
 	case Printable:
 		return o.Rune()
 	default:
+		panic(fmt.Sprintf("unprintable: %v", o))
 		return '?'
 	}
 }

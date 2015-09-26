@@ -6,6 +6,7 @@ import "fmt"
 import "hash/crc32"
 import "math/rand"
 import "runtime"
+import "sync/atomic"
 
 import "github.com/dnesting/alife/goalife/entities/census"
 import "github.com/dnesting/alife/goalife/entities/org"
@@ -24,6 +25,12 @@ type CpuOrgGenome struct {
 	decompiled []string
 }
 
+var stepCount int64 = 0
+
+func StepCount() int64 {
+	return atomic.LoadInt64(&stepCount)
+}
+
 func (g CpuOrgGenome) Hash() uint32 {
 	if g.hash == 0 {
 		g.hash = crc32.ChecksumIEEE(g.code)
@@ -39,7 +46,7 @@ func (g CpuOrgGenome) Code() []string {
 }
 
 func (o *CpuOrganism) String() string {
-	return fmt.Sprintf("[org (%d,%d) e=%d g=%d %v]", o.X, o.Y, o.Energy(), o.Cpu.Genome(), &o.Cpu)
+	return fmt.Sprintf("[org (%s) e=%d g=%d %v]", o.BaseOrganism.Locator(), o.Energy(), o.Cpu.Genome(), &o.Cpu)
 }
 
 // Genome returns a census.Genome corresponding to this organism.
@@ -75,6 +82,7 @@ func FromCode(code []string) *CpuOrganism {
 // instruction will be returned, at which point the organism is not expected to continue
 // executing.
 func (o *CpuOrganism) Step(s *sim.Sim) error {
+	atomic.AddInt64(&stepCount, 1)
 	if err := o.Cpu.Step(s, o); err != nil {
 		return err
 	}
@@ -92,6 +100,7 @@ func (o *CpuOrganism) Mutate() {
 func (o *CpuOrganism) Run(s *sim.Sim) {
 	s.T(o, "run")
 	defer func() { s.T(o, "run exiting") }()
+
 	for !s.IsStopped() {
 		if err := o.Step(s); err != nil {
 			o.Die(s, o, err.Error())
