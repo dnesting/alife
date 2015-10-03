@@ -8,6 +8,7 @@
 package main
 
 import "encoding/gob"
+import "flag"
 import "fmt"
 import "io/ioutil"
 import "log"
@@ -27,37 +28,26 @@ import "github.com/dnesting/alife/goalife/sim"
 import "github.com/dnesting/alife/goalife/world"
 import "github.com/dnesting/alife/goalife/world/text"
 
-const printWorld = true
-const tracing = false
+var (
+	printWorld         = true
+	tracing            bool
+	syncUpdate         bool
+	refreshHz          = 30
+	recordAtPopulation = 40
+	autoSaveDirectory  = "/tmp"
+	autoSaveFilename   = "autosave.dat"
+	autoSaveSecs       = 1
+	pprof              = false
+)
 
-// syncUpdate synchronizes an organism's execution until its last
-// operation gets rendered. This greatly slows execution, but allows
-// for a more pleasing visual representation of the organisms as
-// they move about. When this is false, a great many movements of the
-// organisms can occur between renderings.
-const syncUpdate = false
-
-// refreshHz controls the rate at which we will attempt to re-render
-// the world in the terminal.
-const refreshHz = 30
-
-// recordAtPopulation will trigger a census recording of any genome that
-// reaches this many organisms living at once.
-const recordAtPopulation = 40
-
-// autoSaveDirectory is the directory within which we will auto-save the
-// world.
-const autoSaveDirectory = "/tmp"
-
-// autoSaveFilename is the filename to which we will auto-save the world
-// within autoSaveDirectory.
-const autoSaveFilename = "autosave.dat"
-
-// autoSaveSecs is how often we will attempt to auto-save the world.
-const autoSaveSecs = 1
-
-// pprof determines whether to enable profiling
-const pprof = true
+func init() {
+	flag.BoolVar(&printWorld, "print_world", true, "render the world to the terminal")
+	flag.BoolVar(&tracing, "trace", false, "enable tracing")
+	flag.BoolVar(&syncUpdate, "sync", false, "synchronous rendering")
+	flag.IntVar(&refreshHz, "print_hz", 30, "refresh rate in Hz for print_world")
+	flag.IntVar(&recordAtPopulation, "record_pop_size", 40, "record a sample of orgs when they reach this population size")
+	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
+}
 
 func initWorld(w *world.World) {
 	// We want to consider food pellets to be equivalent to an empty cell for
@@ -93,6 +83,7 @@ func createOrg(s *sim.Sim, c census.Census) interface{} {
 }
 
 func main() {
+	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
 
 	if pprof {
