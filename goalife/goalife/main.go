@@ -136,6 +136,9 @@ func main() {
 
 	// Start rendering updates to the screen periodically.
 	screenUpdated, screenTicker := startScreenUpdates(s, &frame, refreshHz)
+	if syncUpdate {
+		s.Sync = screenUpdated
+	}
 	defer screenTicker.Stop()
 
 	// Start auto-saving the world periodically.
@@ -156,21 +159,6 @@ func main() {
 			}
 		}
 	}()
-	w.UpdateFn = func(w *world.World) {
-		atomic.AddInt64(&frame, 1)
-
-		// If we want synchronous renderings, we just block
-		// here until a rendering occurs. This effectively
-		// blocks the goroutine that triggered the world
-		// update, meaning that organisms that performed a
-		// world-changing action won't get to do another
-		// one until their last action got rendered.
-		if syncUpdate {
-			screenUpdated.L.Lock()
-			defer screenUpdated.L.Unlock()
-			screenUpdated.Wait()
-		}
-	}
 
 	s.Run()
 	close(doneCh)

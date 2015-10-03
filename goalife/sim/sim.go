@@ -44,6 +44,11 @@ type Sim struct {
 	// entirely from history.  Otherwise, MinimumOrgs has no effect.
 	OrgFactory func() interface{}
 
+	// Sync is used to cause elements of the simulation to synchronize on some event,
+	// typically rendering of the world to allow for smoother rendering at the expense of
+	// CPU efficiency.  May be nil.
+	Sync *sync.Cond
+
 	// Tracer is an optional io.Writer where tracing messages will be written.
 	Tracer io.Writer
 
@@ -73,6 +78,14 @@ func NewSim(w *world.World, c census.Census) *Sim {
 	})
 
 	return s
+}
+
+func (s *Sim) Wait() {
+	if s.Sync != nil {
+		s.Sync.L.Lock()
+		s.Sync.Wait()
+		s.Sync.L.Unlock()
+	}
 }
 
 // StopAll sets a flag that will result in subsequent invocations of

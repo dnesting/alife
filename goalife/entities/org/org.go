@@ -96,6 +96,7 @@ func (o *BaseOrganism) PlaceRandomly(s *sim.Sim, n Organism) {
 func (o *BaseOrganism) Forward(s *sim.Sim) {
 	s.T(o, "forward")
 	dx, dy := delta(o.Dir, 1)
+	s.Wait()
 	o.loc.MoveIfEmpty(dx, dy)
 }
 
@@ -181,6 +182,7 @@ func (o *BaseOrganism) Sense(s *sim.Sim, filterFn SenseFilter) float64 {
 // this function is called.
 func (o *BaseOrganism) Die(s *sim.Sim, n Organism, reason string) {
 	s.T(o, "dying: %s", reason)
+	s.Wait()
 	o.loc.Replace(entities.NewFood(o.Energy() + s.BodyEnergy))
 }
 
