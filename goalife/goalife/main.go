@@ -37,19 +37,6 @@ const tracing = false
 // organisms can occur between renderings.
 const syncUpdate = false
 
-// ensureOrgs is the number of organisms we should attempt to maintain
-// in the world at all times. We will populate the world with randomly-
-// generated organisms as needed.
-const ensureOrgs = 50
-
-// initialEnergy is the energy that should be given to the organisms we
-// use to seed the world.
-const initialEnergy = 20000
-
-// fractionFromHistory controls how often our randomly-generated organism
-// is actually just something we pull out of the census history.
-const fractionFromHistory = 0.01
-
 // refreshHz controls the rate at which we will attempt to re-render
 // the world in the terminal.
 const refreshHz = 30
@@ -72,37 +59,6 @@ const autoSaveSecs = 1
 // pprof determines whether to enable profiling
 const pprof = true
 
-func putRandomOrg(s *sim.Sim) {
-	o := cpuorg.Random()
-	o.AddEnergy(initialEnergy)
-	o.PlaceRandomly(s, o)
-	s.Start(o)
-}
-
-func resurrectOrg(s *sim.Sim) {
-	c, err := s.Census.Random()
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	if c != nil {
-		o := cpuorg.FromCode(c.Genome.Code())
-		o.AddEnergy(initialEnergy)
-		o.PlaceRandomly(s, o)
-		s.Start(o)
-	}
-}
-
-func ensureMinimumOrgs(s *sim.Sim) {
-	for c := s.Census.Count(); c < ensureOrgs; c++ {
-		if rand.Float32() < fractionFromHistory {
-			resurrectOrg(s)
-		} else {
-			putRandomOrg(s)
-		}
-	}
-}
-
 func initWorld(w *world.World) {
 	// We want to consider food pellets to be equivalent to an empty cell for
 	// the purposes of placing a new organism.
@@ -114,12 +70,26 @@ func initWorld(w *world.World) {
 	}
 }
 
-func startAll(s *sim.Sim, w *world.World) {
-	w.EachLocation(func(x, y int, v interface{}) {
-		if r, ok := v.(sim.Runnable); ok {
-			s.Start(r)
+func createOrg(s *sim.Sim, c census.Census) interface{} {
+	d, ok := c.(*census.DirCensus)
+	var o *cpuorg.CpuOrganism
+	if ok && rand.Float32() < s.FractionFromHistory {
+		if cohort, err := d.Random(); err == nil {
+			if cohort != nil {
+				o = cpuorg.FromCode(cohort.Genome.Code())
+			}
+		} else {
+			fmt.Println(err.Error())
 		}
-	})
+	} else {
+		o = cpuorg.Random()
+	}
+	if o != nil {
+		o.AddEnergy(s.InitialEnergy)
+		o.PlaceRandomly(s, o)
+		return o
+	}
+	return nil
 }
 
 func main() {
@@ -153,30 +123,24 @@ func main() {
 		w.PlaceRandomly(entities.NewFood(1000))
 	}
 
+	// Use a Census instance to track the evolution of "genomes" over time.
+	c := census.NewDirCensus("/tmp/census", recordAtPopulation)
+
 	// The Sim instance manages most aspects of the simulation.
-	s := sim.NewSim(w)
-	s.MutateOnDivideProb = 0.01
+	s := sim.NewSim(w, c)
+	s.MinimumOrgs = 50
 	s.BodyEnergy = 1000
+	s.InitialEnergy = 5000
 	s.SenseDistance = 10
+	s.FractionFromHistory = 0.0001
+	s.MutateOnDivideProb = 0.01
+	s.OrgFactory = func() interface{} {
+		return createOrg(s, c)
+	}
+
 	if tracing {
 		s.Tracer = os.Stdout
 		w.Tracer = os.Stdout
-	}
-
-	// Use a Census instance to track the evolution of "genomes" over time.
-	s.Census = census.NewDirCensus("/tmp/census", recordAtPopulation)
-	s.Census.OnChange(func(b census.Census, _ census.Cohort, _ bool) {
-		if !s.IsStopped() {
-			ensureMinimumOrgs(s)
-		}
-	})
-
-	startAll(s, w)
-	ensureMinimumOrgs(s)
-
-	if printWorld {
-		// Clear the screen
-		fmt.Print("\033[H\033[2J")
 	}
 
 	// Start rendering updates to the screen periodically.
@@ -184,7 +148,6 @@ func main() {
 	defer screenTicker.Stop()
 
 	// Start auto-saving the world periodically.
-	// TODO(dnesting): This is broken because we can't use gob to save an array with nil values
 	autoSaveTicker := startAutoSave(w, &frame, autoSaveSecs)
 	defer autoSaveTicker.Stop()
 
@@ -212,6 +175,11 @@ func main() {
 // It returns a sync.Cond instance that gets triggered after every rendering,
 // and a time.Ticker instance that can be stopped to halt rendering.
 func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *time.Ticker) {
+	if printWorld {
+		// Clear the screen
+		fmt.Print("\033[H\033[2J")
+	}
+
 	printed := sync.NewCond(&sync.Mutex{})
 	ticker := time.NewTicker(time.Second / time.Duration(refreshHz))
 
@@ -223,10 +191,13 @@ func startScreenUpdates(s *sim.Sim, frame *int64, refreshHz int) (*sync.Cond, *t
 				}
 				fmt.Println(text.WorldAsString(s.World))
 				fmt.Printf("update %d, steps %d\n", *frame, cpuorg.StepCount())
-				fmt.Printf("seen %d/%d (%d/%d species, %d recorded)     \n",
+				fmt.Printf("seen %d/%d (%d/%d species",
 					s.Census.Count(), s.Census.CountAllTime(),
-					s.Census.Distinct(), s.Census.DistinctAllTime(),
-					s.Census.NumRecorded)
+					s.Census.Distinct(), s.Census.DistinctAllTime())
+				if dc, ok := s.Census.(*census.DirCensus); ok {
+					fmt.Printf(", %d recorded", dc.NumRecorded)
+				}
+				fmt.Println("     ")
 				x, y := s.World.Width(), s.World.Height()
 				fmt.Printf("random: %+v\033[K\n",
 					s.World.At(rand.Intn(x), rand.Intn(y)).Value())
