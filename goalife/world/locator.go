@@ -133,9 +133,10 @@ func (e *Entity) Remove() {
 	defer e.w.mu.Unlock()
 	if !e.Invalid {
 		e.checkLocationInvariant()
-		var update []Update
-		e.w.removeLocked(e.X, e.Y, &update)
-		e.w.notify(update)
+		e.w.removeLocked(e.X, e.Y)
+		e.w.notify([]Update{Update{
+			Old: &Point{e.X, e.Y, &e.v},
+		}})
 		e.invalidate()
 	}
 }
@@ -147,9 +148,8 @@ func (e *Entity) Replace(n interface{}) Locator {
 	if !e.Invalid {
 		e.checkLocationInvariant()
 
-		var update []Update
-		ne := e.w.putLocked(e.X, e.Y, n, &update)
-		e.w.notify(update)
+		ne := e.w.putLocked(e.X, e.Y, n)
+		e.w.notify([]Update{Update{New: &Point{e.X, e.Y, &n}}})
 
 		e.w.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
 		ne.checkLocationInvariant()
@@ -182,11 +182,15 @@ func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 		e.checkLocationInvariant()
 
 		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
-		var update []Update
-		l := e.w.putIfEmptyLocked(x, y, n, &update)
-		e.w.notify(update)
+		l, orig := e.w.putIfEmptyLocked(x, y, n)
 		if l, ok := l.(*Entity); ok {
 			l.checkLocationInvariant()
+		}
+		if l != nil {
+			e.w.notify([]Update{Update{
+				Old: &Point{x, y, &orig},
+				New: &Point{x, y, &n},
+			}})
 		}
 		e.w.T(e, "PutIfEmpty(%d,%d, %v)", dx, dy, n)
 		return l
@@ -204,10 +208,18 @@ func (e *Entity) MoveIfEmpty(dx, dy int) bool {
 		e.checkLocationInvariant()
 
 		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
+		ox, oy := e.X, e.Y
 
-		var update []Update
-		ok := e.w.moveIfEmptyLocked(e, x, y, &update)
-		e.w.notify(update)
+		orig, ok := e.w.moveIfEmptyLocked(e, x, y)
+		var updates []Update
+		if orig != nil {
+			updates = append(updates, Update{Old: &Point{x, y, &orig}})
+		}
+		updates = append(updates, Update{
+			Old: &Point{ox, oy, &e.v},
+			New: &Point{x, y, &e.v},
+		})
+		e.w.notify(updates)
 		e.checkLocationInvariant()
 		e.w.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
 		return ok
