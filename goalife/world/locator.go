@@ -129,25 +129,27 @@ func (e *Entity) checkLocationInvariant() {
 
 func (e *Entity) Remove() {
 	e.w.T(e, "Remove")
-	defer e.w.notifyUpdate()
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
 	if !e.Invalid {
 		e.checkLocationInvariant()
-		e.w.removeLocked(e.X, e.Y)
+		var update []Update
+		e.w.removeLocked(e.X, e.Y, &update)
+		e.w.notify(update)
 		e.invalidate()
 	}
 }
 
 func (e *Entity) Replace(n interface{}) Locator {
 	e.w.T(e, "Replace(%v)", n)
-	defer e.w.notifyUpdate()
 	e.w.mu.Lock()
 	defer e.w.mu.Unlock()
 	if !e.Invalid {
 		e.checkLocationInvariant()
 
-		ne := e.w.putLocked(e.X, e.Y, n)
+		var update []Update
+		ne := e.w.putLocked(e.X, e.Y, n, &update)
+		e.w.notify(update)
 
 		e.w.T(e, "- with %v at (%d,%d)", ne, e.X, e.Y)
 		ne.checkLocationInvariant()
@@ -171,7 +173,6 @@ func (e *Entity) Relative(dx, dy int) Locator {
 }
 
 func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
-	defer e.w.notifyUpdate()
 	// Rule (4): e.w.PutIfEmpty may end up replacing an existing
 	// entity, so we need to grab the multi lock.
 	e.w.mu.Lock()
@@ -181,7 +182,9 @@ func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 		e.checkLocationInvariant()
 
 		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
-		l := e.w.putIfEmptyLocked(x, y, n)
+		var update []Update
+		l := e.w.putIfEmptyLocked(x, y, n, &update)
+		e.w.notify(update)
 		if l, ok := l.(*Entity); ok {
 			l.checkLocationInvariant()
 		}
@@ -192,7 +195,6 @@ func (e *Entity) PutIfEmpty(dx, dy int, n interface{}) Locator {
 }
 
 func (e *Entity) MoveIfEmpty(dx, dy int) bool {
-	defer e.w.notifyUpdate()
 	// Rule (4): e.w.moveIfEmpty may end up replacing an existing
 	// entity, so we need to grab the multi lock.
 	e.w.mu.Lock()
@@ -203,7 +205,9 @@ func (e *Entity) MoveIfEmpty(dx, dy int) bool {
 
 		x, y := e.w.Wrap(e.X+dx, e.Y+dy)
 
-		ok := e.w.moveIfEmptyLocked(e, x, y)
+		var update []Update
+		ok := e.w.moveIfEmptyLocked(e, x, y, &update)
+		e.w.notify(update)
 		e.checkLocationInvariant()
 		e.w.T(e, "MoveIfEmpty(%d,%d) = %v", dx, dy, ok)
 		return ok

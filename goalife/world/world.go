@@ -8,6 +8,11 @@ import "io"
 import "math/rand"
 import "sync"
 
+type Update struct {
+	X, Y int
+	V    *interface{}
+}
+
 // World is a place within which occupants can exist.  It contains various functions for
 // retrieving and manipulating items by their (x, y) coordinates.  It is implemented as
 // a toroidal 2D grid.
@@ -17,6 +22,12 @@ type World struct {
 	EmptyFn  func(o interface{}) bool
 	UpdateFn func(w *World)
 	Tracer   io.Writer
+
+	subs []chan<- []Update
+}
+
+func (w *World) Subscribe(ch chan<- []Update) {
+	w.subs = append(w.subs, ch)
 }
 
 func (w *World) get(x, y int) *Entity {
@@ -76,9 +87,12 @@ func (w *World) Height() int {
 	return w.Grid.Height()
 }
 
-func (w *World) notifyUpdate() {
-	if w.UpdateFn != nil {
-		w.UpdateFn(w)
+func (w *World) notify(u []Update) {
+	if len(u) == 0 {
+		return
+	}
+	for _, c := range w.subs {
+		c <- u
 	}
 }
 
@@ -98,10 +112,11 @@ func (w *World) createEntity(x, y int, value interface{}) *Entity {
 	}
 }
 
-func (w *World) putLocked(x, y int, value interface{}) (e *Entity) {
+func (w *World) putLocked(x, y int, value interface{}, update *[]Update) (e *Entity) {
 	defer func() { w.T(w, "putLocked(%d,%d, %v) = %v", x, y, value, e) }()
 	e = w.createEntity(x, y, value)
 	w.Grid.Put(x, y, e)
+	*update = append(*update, Update{x, y, &e.v})
 	return e
 }
 
@@ -114,12 +129,14 @@ func (w *World) At(x, y int) Locator {
 	return w.get(x, y)
 }
 
-func (w *World) removeLocked(x, y int) (orig interface{}) {
+func (w *World) removeLocked(x, y int, update *[]Update) (orig interface{}) {
 	defer func() { w.T(w, "removeLocked(%d,%d) = %v", x, y, orig) }()
-	return w.Grid.Put(x, y, nil).(*Entity).Value()
+	orig = w.Grid.Put(x, y, nil).(*Entity).Value()
+	*update = append(*update, Update{x, y, nil})
+	return orig
 }
 
-func (w *World) putEntityIfEmpty(x, y int, e *Entity) (ok bool) {
+func (w *World) putEntityIfEmpty(x, y int, e *Entity, update *[]Update) (ok bool) {
 	defer func() { w.T(w, "putEntityIfEmpty(%d,%d, %v) = %v", x, y, e, ok) }()
 
 	dest := w.get(x, y)
@@ -129,33 +146,36 @@ func (w *World) putEntityIfEmpty(x, y int, e *Entity) (ok bool) {
 	}
 	dest.invalidate()
 	w.Grid.Put(x, y, e)
+	*update = append(*update, Update{x, y, &e.v})
 	e.X = x
 	e.Y = y
 	return true
 }
 
 func (w *World) PutIfEmpty(x, y int, n interface{}) (loc Locator) {
-	defer w.notifyUpdate()
 	defer func() { w.T(w, "PutIfEmpty(%d,%d, %v) = %v", x, y, n, loc) }()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	return w.putIfEmptyLocked(x, y, n)
+	var update []Update
+	loc = w.putIfEmptyLocked(x, y, n, &update)
+	w.notify(update)
+	return loc
 }
 
-func (w *World) putIfEmptyLocked(x, y int, n interface{}) (loc Locator) {
+func (w *World) putIfEmptyLocked(x, y int, n interface{}, update *[]Update) (loc Locator) {
 	defer func() { w.T(w, "PutIfEmpty(%d,%d, %v) = %v", x, y, n, loc) }()
 	e := w.createEntity(x, y, n)
-	if w.putEntityIfEmpty(x, y, e) {
+	if w.putEntityIfEmpty(x, y, e, update) {
 		return e
 	}
 	return nil
 }
 
-func (w *World) moveIfEmptyLocked(e *Entity, x, y int) (ok bool) {
+func (w *World) moveIfEmptyLocked(e *Entity, x, y int, update *[]Update) (ok bool) {
 	defer func() { w.T(w, "moveIfEmptyLocked(%v, %d,%d) = %v", e, x, y, ok) }()
 	ox, oy := e.X, e.Y
-	if w.putEntityIfEmpty(x, y, e) {
+	if w.putEntityIfEmpty(x, y, e, update) {
 		w.Grid.Put(ox, oy, nil)
 		return true
 	}

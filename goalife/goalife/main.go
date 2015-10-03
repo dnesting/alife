@@ -143,6 +143,19 @@ func main() {
 	defer autoSaveTicker.Stop()
 
 	// This is called every time the world changes somehow.
+	worldCh := make(chan []world.Update)
+	doneCh := make(chan bool)
+	w.Subscribe(worldCh)
+	go func() {
+		for {
+			select {
+			case <-worldCh:
+				atomic.AddInt64(&frame, 1)
+			case <-doneCh:
+				break
+			}
+		}
+	}()
 	w.UpdateFn = func(w *world.World) {
 		atomic.AddInt64(&frame, 1)
 
@@ -160,6 +173,7 @@ func main() {
 	}
 
 	s.Run()
+	close(doneCh)
 }
 
 // startScreenUpdates begins rendering s.World every 1/refreshHz seconds.
