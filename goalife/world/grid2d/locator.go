@@ -1,5 +1,7 @@
 package grid2d
 
+import "fmt"
+
 type Locator interface {
 	Get(dx, dy int) Locator
 	Put(dx, dy int, n interface{}, fn PutWhenFunc) (interface{}, Locator)
@@ -7,6 +9,7 @@ type Locator interface {
 	Replace(n interface{}) Locator
 	Remove()
 	IsValid() bool
+	Value() interface{}
 }
 
 type locator struct {
@@ -77,27 +80,39 @@ func (l *locator) Replace(n interface{}) Locator {
 	defer l.w.Unlock()
 	l.checkValid()
 	l.checkLocationInvariant()
-	return l.w.putLocked(l.x, l.y, n, PutAlways)
+	_, loc := l.w.putLocked(l.x, l.y, n, PutAlways)
+	return loc
 }
 
-func (l *locator) Remove() Locator {
+func (l *locator) Remove() {
 	l.w.Lock()
 	defer l.w.Unlock()
 	if l.invalid {
 		return
 	}
 	l.checkLocationInvariant()
-	return l.Replace(nil)
+	l.Replace(nil)
 }
 
 func (l *locator) invalidate() {
-	l.w.Lock()
-	defer l.w.Unlock()
+	if l == nil {
+		return
+	}
 	l.invalid = true
 }
 
-func (l *locator) IsValid() {
+func (l *locator) IsValid() bool {
+	if l == nil {
+		return false
+	}
 	l.w.RLock()
 	defer l.w.RUnlock()
-	return l.invalid
+	return !l.invalid
+}
+
+func (l *locator) Value() interface{} {
+	if l != nil {
+		return l.v
+	}
+	return nil
 }

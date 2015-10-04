@@ -1,5 +1,8 @@
 package grid2d
 
+import "fmt"
+import "sync"
+
 type PutWhenFunc func(existing, proposed interface{}) bool
 
 var PutAlways PutWhenFunc = func(_, _ interface{}) bool {
@@ -11,47 +14,60 @@ var PutWhenNil PutWhenFunc = func(a, _ interface{}) bool {
 }
 
 type Grid interface {
+	Extents() (int, int)
 	Get(x, y int) Locator
 	Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator)
 	All() []Locator
-	Each(func(Locator))
 }
 
 type grid struct {
 	sync.RWMutex
-	w, h int
-	data []Locator
+	width, height int
+	data          []*locator
 }
 
 func New(width, height int) Grid {
 	return &grid{
-		w:    width,
-		h:    height,
-		data: make([]Locator, w*h),
+		width:  width,
+		height: height,
+		data:   make([]*locator, width*height),
 	}
+}
+
+func (g *grid) Extents() (int, int) {
+	g.RLock()
+	defer g.RUnlock()
+	return g.width, g.height
 }
 
 func (g *grid) offset(w, h int) int {
-	if w < 0 || w > g.w || h < 0 || h > g.h {
-		panic(fmt.Sprintf("grid index out of bounds: (%d,%d) is outside %dx%d", w, h, g.w, g.h))
+	if w < 0 || w > g.width || h < 0 || h > g.height {
+		panic(fmt.Sprintf("grid index out of bounds: (%d,%d) is outside %dx%d", w, h, g.width, g.height))
 	}
-	return h*g.w + w
+	return h*g.width + w
 }
 
 func (g *grid) Get(x, y int) Locator {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getLocked(x, y)
+	g.RLock()
+	defer g.RUnlock()
+	if loc := g.getLocked(x, y); loc != nil {
+		return loc
+	}
+	return nil
 }
 
-func (g *grid) getLocked(x, y int) Locator {
+func (g *grid) getLocked(x, y int) *locator {
 	return g.data[g.offset(x, y)]
 }
 
 func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.putLocked(x, y, n, fn)
+	g.Lock()
+	defer g.Unlock()
+	orig, loc := g.putLocked(x, y, n, fn)
+	if loc != nil {
+		return orig, loc
+	}
+	return orig, nil
 }
 
 func shouldPut(fn PutWhenFunc, a, b interface{}) bool {
@@ -61,24 +77,38 @@ func shouldPut(fn PutWhenFunc, a, b interface{}) bool {
 	return fn(a, b)
 }
 
-func (g *grid) putLocked(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
+func (g *grid) putLocked(x, y int, n interface{}, fn PutWhenFunc) (interface{}, *locator) {
 	origLoc := g.getLocked(x, y)
 	origValue := origLoc.Value()
-	if !shouldPut(fn, orig, n) {
+	if !shouldPut(fn, origValue, n) {
 		return origValue, nil
 	}
-	var loc Locator
+	var loc *locator
 	if n != nil {
-		loc = &locator{x, y, n}
+		loc = &locator{g, x, y, n, false}
 	}
-	g.data[g.offset(x, y)] = loc
 	origLoc.invalidate()
+	g.data[g.offset(x, y)] = loc
 	return origValue, loc
 }
 
+func (g *grid) moveLocked(x1, y1, x2, y2 int, fn PutWhenFunc) (interface{}, bool) {
+	src := g.getLocked(x1, y1)
+	dst := g.getLocked(x2, y2)
+	if !shouldPut(fn, src.Value(), dst.Value()) {
+		return dst.Value(), false
+	}
+	dst.invalidate()
+	g.data[g.offset(x2, y2)] = src
+	g.data[g.offset(x1, y1)] = nil
+	src.x = x2
+	src.y = y2
+	return dst.Value(), true
+}
+
 func (g *grid) All() []Locator {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.RLock()
+	defer g.RUnlock()
 	var locs []Locator
 	for _, l := range g.data {
 		if l != nil {
