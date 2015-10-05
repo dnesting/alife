@@ -80,7 +80,10 @@ func PrintWorld(w io.Writer, g grid2d.Grid, fn func(interface{}) rune) {
 	printWorld(w, locs, width, height, fn)
 }
 
-func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn func(interface{}) rune) {
+func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn RuneFunc) {
+	if fn == nil {
+		fn = DefaultRunes
+	}
 	sort.Sort(byCoordinate(points))
 
 	iy, ix := 0, -1

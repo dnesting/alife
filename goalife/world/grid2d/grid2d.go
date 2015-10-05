@@ -100,6 +100,9 @@ func (g *grid) putLocked(x, y int, n interface{}, fn PutWhenFunc) (interface{}, 
 	}
 	origLoc.invalidate()
 	g.data[g.offset(x, y)] = loc
+	if l, ok := n.(UsesLocator); ok {
+		l.UseLocator(loc)
+	}
 	return origValue, loc
 }
 

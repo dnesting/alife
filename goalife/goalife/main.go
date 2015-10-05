@@ -12,8 +12,9 @@ import "os"
 import "sync"
 import "time"
 
+import "github.com/dnesting/alife/goalife/energy"
+import "github.com/dnesting/alife/goalife/term"
 import "github.com/dnesting/alife/goalife/world/grid2d"
-import "github.com/dnesting/alife/goalife/world/grid2d/term"
 
 var (
 	printWorld bool
@@ -33,12 +34,14 @@ func main() {
 
 	g := grid2d.New(200, 50)
 
+	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
+	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)
+	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)
+	g.Put(13, 13, energy.NewFood(8000), grid2d.PutAlways)
+
 	if printWorld {
 		dur := time.Duration(1.0/printRate) * time.Second
-		chooseRune := func(o interface{}) rune {
-			return '?'
-		}
-		go term.Printer(os.Stdout, g, chooseRune, dur, exit)
+		go term.Printer(os.Stdout, g, nil, dur, exit)
 	}
 
 	var wg sync.WaitGroup

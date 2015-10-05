@@ -12,6 +12,10 @@ type Locator interface {
 	Value() interface{}
 }
 
+type UsesLocator interface {
+	UseLocator(loc Locator)
+}
+
 type locator struct {
 	w       *grid
 	x, y    int
