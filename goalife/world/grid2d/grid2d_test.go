@@ -103,3 +103,21 @@ func TestAll(t *testing.T) {
 		t.Errorf("All() should have returned a two-element slice, expected %v got %v", expected, all)
 	}
 }
+
+func TestLocations(t *testing.T) {
+	g := New(3, 3)
+	locs := g.Locations()
+	if len(locs) != 0 {
+		t.Errorf("Locations() should have returned an empty slice on an empty grid, got %v", locs)
+	}
+
+	g.Put(1, 2, 10, PutAlways)
+	locs = g.Locations()
+	if len(locs) != 1 {
+		t.Errorf("Locations() should return one element when one field is occupied, got %v", len(locs))
+	}
+	expected := Point{1, 2, 10}
+	if !reflect.DeepEqual(locs[0], expected) {
+		t.Errorf("Locations() should have returned a one-element slice, expected %v got %v", expected, locs[0])
+	}
+}

@@ -13,24 +13,35 @@ var PutWhenNil PutWhenFunc = func(a, _ interface{}) bool {
 	return a == nil
 }
 
+type Point struct {
+	X, Y int
+	V    interface{}
+}
+
 type Grid interface {
 	Extents() (int, int)
 	Get(x, y int) Locator
 	Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator)
 	All() []Locator
+	Locations() (int, int, []Point)
+
+	Subscribe(ch chan<- []Update)
+	Unsubscribe(ch chan<- []Update)
 }
 
 type grid struct {
 	sync.RWMutex
+	notifier
 	width, height int
 	data          []*locator
 }
 
 func New(width, height int) Grid {
 	return &grid{
-		width:  width,
-		height: height,
-		data:   make([]*locator, width*height),
+		notifier: newNotifier(),
+		width:    width,
+		height:   height,
+		data:     make([]*locator, width*height),
 	}
 }
 
@@ -116,4 +127,16 @@ func (g *grid) All() []Locator {
 		}
 	}
 	return locs
+}
+
+func (g *grid) Locations() (int, int, []Point) {
+	g.RLock()
+	defer g.RUnlock()
+	var points []Point
+	for _, l := range g.data {
+		if l != nil {
+			points = append(points, Point{l.x, l.y, l.v})
+		}
+	}
+	return g.width, g.height, points
 }

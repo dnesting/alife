@@ -8,28 +8,40 @@
 package main
 
 import "flag"
-import "fmt"
 import "os"
+import "sync"
+import "time"
 
 import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/world/grid2d/term"
 
 var (
 	printWorld bool
-	printRate  float32
+	printRate  float64
 )
 
 func init() {
 	flag.BoolVar(&printWorld, "print", true, "render the world to the terminal")
-	flag.IntVar(&printRate, "print_hz", 10.0, "refresh rate in Hz for --print")
+	flag.Float64Var(&printRate, "print_hz", 10.0, "refresh rate in Hz for --print")
 	//flag.BoolVar(&debug, "debug", false, "enable tracing")
 	//flag.BoolVar(&pprof, "pprof", false, "enable profiling")
 }
 
 func main() {
 	flag.Parse()
+	exit := make(chan bool, 0)
 
-	w := grid2d.New(200, 50)
+	g := grid2d.New(200, 50)
+
 	if printWorld {
-		go grid2d.Printer(os.Stdout, w, printRate)
+		dur := time.Duration(1.0/printRate) * time.Second
+		chooseRune := func(o interface{}) rune {
+			return '?'
+		}
+		go term.Printer(os.Stdout, g, chooseRune, dur, exit)
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	wg.Wait()
 }
