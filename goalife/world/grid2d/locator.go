@@ -67,6 +67,7 @@ func (l *locator) Put(dx, dy int, n interface{}, fn PutWhenFunc) (interface{}, L
 	x, y := l.delta(dx, dy)
 	orig, loc := l.w.putLocked(x, y, n, fn)
 	if loc != nil {
+		l.w.RecordAdd(x, y, n)
 		return orig, loc
 	}
 	return orig, nil
@@ -91,7 +92,13 @@ func (l *locator) Replace(n interface{}) Locator {
 	defer l.w.Unlock()
 	l.checkValid()
 	l.checkLocationInvariant()
+	old := l.v
 	if _, loc := l.w.putLocked(l.x, l.y, n, PutAlways); loc != nil {
+		if n == nil {
+			l.w.RecordRemove(l.x, l.y, old)
+		} else {
+			l.w.RecordReplace(l.x, l.y, old, n)
+		}
 		return loc
 	}
 	return nil

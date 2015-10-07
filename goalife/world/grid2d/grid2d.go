@@ -1,5 +1,7 @@
 package grid2d
 
+import "bytes"
+import "encoding/gob"
 import "fmt"
 import "sync"
 
@@ -24,6 +26,7 @@ type Grid interface {
 	Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator)
 	All() []Locator
 	Locations() (int, int, []Point)
+	Resize(width, height int, removedFn func(x, y int, o interface{}))
 
 	Subscribe(ch chan<- []Update)
 	Unsubscribe(ch chan<- []Update)
@@ -31,14 +34,14 @@ type Grid interface {
 
 type grid struct {
 	sync.RWMutex
-	notifier
+	*notifier
 	width, height int
 	data          []*locator
 }
 
-func New(width, height int) Grid {
+func New(width, height int, done <-chan bool) Grid {
 	return &grid{
-		notifier: newNotifier(),
+		notifier: newNotifier(done),
 		width:    width,
 		height:   height,
 		data:     make([]*locator, width*height),
@@ -76,6 +79,7 @@ func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locato
 	defer g.Unlock()
 	orig, loc := g.putLocked(x, y, n, fn)
 	if loc != nil {
+		g.RecordAdd(x, y, n)
 		return orig, loc
 	}
 	return orig, nil
@@ -117,6 +121,7 @@ func (g *grid) moveLocked(x1, y1, x2, y2 int, fn PutWhenFunc) (interface{}, bool
 	g.data[g.offset(x1, y1)] = nil
 	src.x = x2
 	src.y = y2
+	g.RecordMove(x1, y1, x2, y2, src.v)
 	return dst.Value(), true
 }
 
@@ -142,4 +147,55 @@ func (g *grid) Locations() (int, int, []Point) {
 		}
 	}
 	return g.width, g.height, points
+}
+
+func (g *grid) Resize(width, height int, removedFn func(x, y int, o interface{})) {
+	g.Lock()
+	defer g.Unlock()
+
+	old := g.data
+	g.data = make([]*locator, width*height)
+	g.width = width
+	g.height = height
+
+	for _, l := range old {
+		if l != nil {
+			if l.x >= width || l.y >= height {
+				removedFn(l.x, l.y, l.v)
+				g.RecordRemove(l.x, l.y, l.v)
+			} else {
+				g.data[g.offset(l.x, l.y)] = l
+			}
+		}
+	}
+}
+
+type gobStruct struct {
+	Width  int
+	Height int
+	Points []Point
+}
+
+func (g *grid) GobEncode() ([]byte, error) {
+	var b bytes.Buffer
+	enc := gob.NewEncoder(&b)
+	width, height, locs := g.Locations()
+	if err := enc.Encode(gobStruct{width, height, locs}); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func (g *grid) GobDecode(data []byte) error {
+	b := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(b)
+	var gs gobStruct
+	if err := dec.Decode(&gs); err != nil {
+		return err
+	}
+	g.Resize(gs.Width, gs.Height, nil)
+	for _, p := range gs.Points {
+		g.Put(p.X, p.Y, p.V, PutAlways)
+	}
+	return nil
 }

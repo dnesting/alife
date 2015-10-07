@@ -4,7 +4,9 @@ import "reflect"
 import "testing"
 
 func TestNotify(t *testing.T) {
-	n := newNotifier()
+	doneCh := make(chan bool)
+	defer close(doneCh)
+	n := newNotifier(doneCh)
 
 	tAdd := []Update{
 		Update{
@@ -36,12 +38,8 @@ func TestNotify(t *testing.T) {
 	}
 	n.RecordReplace(1, 1, 10, 11)
 
-	doneCh := make(chan bool)
 	ch := make(chan []Update)
 	n.Subscribe(ch)
-
-	go n.Run(doneCh)
-	close(doneCh)
 
 	got := <-ch
 	if !reflect.DeepEqual(got, tAdd) {

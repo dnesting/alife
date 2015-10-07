@@ -31,10 +31,12 @@ type notifier struct {
 	subs []chan<- []Update
 }
 
-func newNotifier() notifier {
-	return notifier{
+func newNotifier(done <-chan bool) *notifier {
+	n := &notifier{
 		cond: sync.Cond{L: &sync.Mutex{}},
 	}
+	go n.run(done)
+	return n
 }
 
 func (n *notifier) Subscribe(ch chan<- []Update) {
@@ -98,7 +100,7 @@ func (n *notifier) next() []Update {
 	return e.Value.([]Update)
 }
 
-func (n *notifier) Run(exitCh <-chan bool) {
+func (n *notifier) run(exitCh <-chan bool) {
 	if exitCh != nil {
 		go func() {
 			<-exitCh
