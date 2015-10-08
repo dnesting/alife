@@ -24,6 +24,7 @@ type Grid interface {
 	Extents() (int, int)
 	Get(x, y int) Locator
 	Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator)
+	Remove(x, y int) interface{}
 	All() []Locator
 	Locations() (int, int, []Point)
 	Resize(width, height int, removedFn func(x, y int, o interface{}))
@@ -74,10 +75,18 @@ func (g *grid) getLocked(x, y int) *locator {
 	return g.data[g.offset(x, y)]
 }
 
+func (g *grid) Remove(x, y int) interface{} {
+	o, _ := g.Put(x, y, nil, PutAlways)
+	return o
+}
+
 func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	g.Lock()
 	defer g.Unlock()
 	orig, loc := g.putLocked(x, y, n, fn)
+	if orig != nil && n == nil {
+		g.RecordRemove(x, y, orig)
+	}
 	if loc != nil {
 		g.RecordAdd(x, y, n)
 		return orig, loc
