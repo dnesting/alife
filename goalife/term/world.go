@@ -136,7 +136,7 @@ func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, minFreq time
 		case <-timeCh:
 			doPrint(time.Now())
 		case <-done:
-			break
+			return
 		}
 	}
 }

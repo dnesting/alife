@@ -120,4 +120,9 @@ func (n *notifier) run(exitCh <-chan bool) {
 			ch <- u
 		}
 	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, ch := range n.subs {
+		close(ch)
+	}
 }
