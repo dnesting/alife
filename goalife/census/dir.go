@@ -3,17 +3,22 @@ package census
 import "errors"
 import "encoding/gob"
 import "fmt"
+import "io"
 import "io/ioutil"
 import "math/rand"
 import "os"
 import "path"
 
-type PersistentCensus interface {
-	Census
-	NumRecorded() int
-	IsRecorded(key Key)
-	Record(c Population)
-	Random() Population
+var deps = struct {
+	ReadDir func(string) ([]os.FileInfo, error)
+	Stat    func(string) (os.FileInfo, error)
+	Create  func(string) (io.ReadWriteCloser, error)
+	Open    func(string) (io.ReadWriteCloser, error)
+}{
+	ioutil.ReadDir,
+	os.Stat,
+	func(s string) (io.ReadWriteCloser, error) { return os.Create(s) },
+	func(s string) (io.ReadWriteCloser, error) { return os.Open(s) },
 }
 
 // DirCensus implements a Census that saves interesting populations to disk.
@@ -30,7 +35,7 @@ func NewDirCensus(dir string, threshold func(p Population) bool) *DirCensus {
 		Dir:       dir,
 		Threshold: threshold,
 	}
-	ls, _ := ioutil.ReadDir(b.Dir)
+	ls, _ := deps.ReadDir(b.Dir)
 	b.numRecorded = len(ls)
 	return b
 }
@@ -44,13 +49,13 @@ func (b *DirCensus) GetFromRecord(key Key) (Population, error) {
 }
 
 func (b *DirCensus) IsRecorded(key Key) bool {
-	_, err := os.Stat(b.filename(key))
+	_, err := deps.Stat(b.filename(key))
 	return err == nil
 }
 
 // Record writes the given cohort to disk.
 func (b *DirCensus) Record(c Population) error {
-	f, err := os.Create(b.filename(c.Key))
+	f, err := deps.Create(b.filename(c.Key))
 	if err != nil {
 		return err
 	}
@@ -67,7 +72,7 @@ var ErrNoneFound = errors.New("none found")
 
 // Random retrieves a randomly-selected Population from disk.
 func (b *DirCensus) Random() (Population, error) {
-	ls, err := ioutil.ReadDir(b.Dir)
+	ls, err := deps.ReadDir(b.Dir)
 	if err != nil {
 		return Population{}, err
 	}
@@ -79,7 +84,7 @@ func (b *DirCensus) Random() (Population, error) {
 }
 
 func (b *DirCensus) decodeFromFilename(name string) (Population, error) {
-	f, err := os.Open(name)
+	f, err := deps.Open(name)
 	if err != nil {
 		return Population{}, err
 	}

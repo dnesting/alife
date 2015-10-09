@@ -1,6 +1,5 @@
 package census
 
-import "log"
 import "sync"
 
 // MemCensus implements a Census entirely in-memory.
@@ -25,7 +24,6 @@ func (b *MemCensus) Get(key Key) (Population, bool) {
 
 // Add indicates an instance of the given key was added to the world.
 func (b *MemCensus) Add(when interface{}, key Key) (ret Population) {
-	log.Printf("+ Add(%v, %v)", when, key)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.seen == nil {
