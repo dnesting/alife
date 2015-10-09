@@ -8,6 +8,7 @@
 package main
 
 import "flag"
+import "fmt"
 import "log"
 import "os"
 import "sync"
@@ -18,6 +19,8 @@ import _ "net/http/pprof"
 import "github.com/dnesting/alife/goalife/energy"
 import "github.com/dnesting/alife/goalife/term"
 import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/org"
+import "github.com/dnesting/alife/goalife/driver/cpu1"
 
 var (
 	printWorld bool
@@ -49,17 +52,28 @@ func main() {
 	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)
 	g.Put(13, 13, energy.NewFood(8000), grid2d.PutAlways)
 
+	go func() {
+		for {
+			c := cpu1.Random()
+			o := &org.Organism{Driver: c}
+			o.AddEnergy(1000)
+			if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
+				fmt.Printf("%v\n", c.Run(o))
+			}
+		}
+		close(exit)
+	}()
+
 	var wg sync.WaitGroup
 
 	if printWorld {
 		dur := time.Duration(1.0/printRate) * time.Second
 		wg.Add(1)
 		go func() {
-			term.Printer(os.Stdout, g, nil, dur)
+			term.Printer(os.Stdout, g, nil, true, dur)
 			wg.Done()
 		}()
 	}
 
-	close(exit)
 	wg.Wait()
 }

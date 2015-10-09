@@ -100,7 +100,7 @@ func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn RuneFu
 	addFooter(w, width)
 }
 
-func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, minFreq time.Duration) {
+func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, tty bool, minFreq time.Duration) {
 	var due time.Time
 	var timeCh <-chan time.Time
 	updateCh := make(chan []grid2d.Update, 0)
@@ -113,6 +113,9 @@ func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, minFreq time
 
 	doPrint := func(now time.Time) {
 		due = now.Add(minFreq)
+		if tty {
+			io.WriteString(w, "[H")
+		}
 		printWorld(w, locs, width, height, fn)
 		locs = nil
 	}

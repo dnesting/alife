@@ -3,6 +3,7 @@ package grid2d
 import "bytes"
 import "encoding/gob"
 import "fmt"
+import "math/rand"
 import "sync"
 
 type PutWhenFunc func(existing, proposed interface{}) bool
@@ -24,6 +25,7 @@ type Grid interface {
 	Extents() (int, int)
 	Get(x, y int) Locator
 	Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator)
+	PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator)
 	Remove(x, y int) interface{}
 	All() []Locator
 	Locations() (int, int, []Point)
@@ -83,6 +85,16 @@ func (g *grid) Remove(x, y int) interface{} {
 func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	g.Lock()
 	defer g.Unlock()
+	return g.putLockedWithNotify(x, y, n, fn)
+}
+
+func (g *grid) PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator) {
+	g.Lock()
+	defer g.Unlock()
+	return g.putLockedWithNotify(rand.Intn(g.width), rand.Intn(g.height), n, fn)
+}
+
+func (g *grid) putLockedWithNotify(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	orig, loc := g.putLocked(x, y, n, fn)
 	if orig != nil && n == nil {
 		g.RecordRemove(x, y, orig)
