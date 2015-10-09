@@ -2,15 +2,8 @@ package census
 
 import "github.com/dnesting/alife/goalife/world/grid2d"
 
-func WatchWorld(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn func(interface{}) *Key, ready chan<- bool) {
-	updateCh := make(chan []grid2d.Update)
-	g.Subscribe(updateCh)
-	if ready != nil {
-		ready <- true
-	}
-	defer g.Unsubscribe(updateCh)
-
-	for updates := range updateCh {
+func WatchWorld(c Census, ch <-chan []grid2d.Update, timeFn func() interface{}, keyFn func(interface{}) *Key) {
+	for updates := range ch {
 		if updates == nil {
 			return
 		}

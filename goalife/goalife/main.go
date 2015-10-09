@@ -15,6 +15,7 @@ import "time"
 import "net/http"
 import _ "net/http/pprof"
 
+import "github.com/dnesting/alife/goalife/census"
 import "github.com/dnesting/alife/goalife/energy"
 import "github.com/dnesting/alife/goalife/term"
 import "github.com/dnesting/alife/goalife/world/grid2d"
@@ -35,6 +36,16 @@ func init() {
 	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
 }
 
+func orgHash(o interface{}) *census.Key {
+	if o, ok := o.(*org.Organism); ok {
+		if c, ok := o.Driver.(*cpu1.Cpu); ok {
+			i := census.Key(c)
+			return &i
+		}
+	}
+	return nil
+}
+
 func main() {
 	flag.Parse()
 	if pprof {
@@ -51,6 +62,11 @@ func main() {
 	exit := make(chan bool, 0)
 
 	g := grid2d.New(200, 50, exit)
+
+	ch := make(chan []grid2d.Update, 0)
+	g.Subscribe(ch)
+	cns := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
+	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
 
 	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
 	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)
