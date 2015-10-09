@@ -2,6 +2,8 @@ package org
 
 import "errors"
 import "fmt"
+import "log"
+import "io/ioutil"
 import "math"
 import "math/rand"
 import "sync"
@@ -13,6 +15,8 @@ const BodyEnergy = 100
 const SenseFalloffExp = 2
 const SenseDistance = 10
 
+var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+
 type Organism struct {
 	energy.Battery
 	loc    grid2d.Locator
@@ -22,11 +26,16 @@ type Organism struct {
 	Dir int
 }
 
+func (o *Organism) String() string {
+	return fmt.Sprintf("[org %v e=%v d=%v %v]", o.loc, o.Energy(), o.Dir, o.Driver)
+}
+
 func (o *Organism) UseLocator(loc grid2d.Locator) {
 	o.loc = loc
 }
 
 func (o *Organism) Left() {
+	Logger.Printf("%v.Left()\n", o)
 	o.Lock()
 	defer o.Unlock()
 
@@ -37,6 +46,7 @@ func (o *Organism) Left() {
 }
 
 func (o *Organism) Right() {
+	Logger.Printf("%v.Right()\n", o)
 	o.Lock()
 	defer o.Unlock()
 	o.Dir = (o.Dir + 1) % 8
@@ -46,21 +56,14 @@ var ErrNoEnergy = errors.New("out of energy")
 
 func (o *Organism) Discharge(amt int) error {
 	act, _ := o.AddEnergy(-amt)
-	if act != amt {
+	if amt != -act {
 		return ErrNoEnergy
 	}
 	return nil
 }
 
-func (o *Organism) AddEnergy(amt int) (int, int) {
-	act, e := o.Battery.AddEnergy(amt)
-	if e == 0 {
-		o.die()
-	}
-	return act, e
-}
-
-func (o *Organism) die() {
+func (o *Organism) Die() {
+	Logger.Printf("%v.Die()\n", o)
 	o.loc.Replace(energy.NewFood(o.Energy() + BodyEnergy))
 }
 
@@ -90,7 +93,9 @@ func (o *Organism) delta(dist int) (int, int) {
 var ErrNotEmpty = errors.New("cell occupied")
 
 func (o *Organism) Forward() error {
+	Logger.Printf("%v.Forward()\n", o)
 	if err := o.Discharge(1); err != nil {
+		Logger.Printf("%v.Forward: %v\n", o, err)
 		return err
 	}
 	dx, dy := o.delta(1)
@@ -115,6 +120,7 @@ var PutWhenFood = func(orig, n interface{}) bool {
 }
 
 func (o *Organism) Divide(driver interface{}, energyFrac float64) (*Organism, error) {
+	Logger.Printf("%v.Divide(%v, %v)\n", o, driver, energyFrac)
 	if err := o.Discharge(5); err != nil {
 		return nil, err
 	}
@@ -131,6 +137,7 @@ func (o *Organism) Divide(driver interface{}, energyFrac float64) (*Organism, er
 }
 
 func (o *Organism) Sense(fn func(o interface{}) float64) float64 {
+	Logger.Printf("%v.Sense(%v)\n", o, fn)
 	var e float64
 	if fn == nil {
 		fn = func(_ interface{}) float64 { return 1.0 }
@@ -146,6 +153,7 @@ func (o *Organism) Sense(fn func(o interface{}) float64) float64 {
 }
 
 func (o *Organism) Eat(amt int) (int, error) {
+	Logger.Printf("%v.Eat(%v)\n", o, amt)
 	if err := o.Discharge(amt / 100); err != nil {
 		return 0, err
 	}

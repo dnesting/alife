@@ -1,9 +1,14 @@
 package cpu1
 
-import "fmt"
 import "errors"
+import "fmt"
+import "io/ioutil"
+import "log"
+import "runtime"
 
 import "github.com/dnesting/alife/goalife/org"
+
+var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
 
 // Cpu is a simple 8-bit CPU with 4 registers.
 type Cpu struct {
@@ -13,7 +18,7 @@ type Cpu struct {
 }
 
 func (c *Cpu) String() string {
-	return fmt.Sprintf("[cpu ip=%d %v]", c.Ip, c.R)
+	return fmt.Sprintf("[cpu %x ip=%d %v]", c.Code.Hash(), c.Ip, c.R)
 }
 
 func (c *Cpu) Copy() *Cpu {
@@ -23,6 +28,7 @@ func (c *Cpu) Copy() *Cpu {
 }
 
 func (c *Cpu) Mutate() {
+	Logger.Printf("%v.Mutate()", c)
 	c.Code.Mutate(opTable)
 }
 
@@ -36,15 +42,17 @@ func Random() *Cpu {
 	}
 }
 
+var unableToReadErr = errors.New("unable to read next instruction")
+
 // Step executes one CPU operation.  Any error or panic that occurs will result in an error
 // being returned.  Execution is expected to cease if an error is returned.
 func (c *Cpu) Step(o *org.Organism) (err error) {
 	op, ip := c.readOp()
 	c.Ip = ip
 	if op == nil {
-		err := errors.New("unable to read next instruction")
-		return err
+		return unableToReadErr
 	}
+	Logger.Printf("%v.Step(%v): %v\n", c, o, op)
 
 	if err := o.Discharge(op.Cost); err != nil {
 		return err
@@ -58,10 +66,14 @@ func (c *Cpu) Step(o *org.Organism) (err error) {
 }
 
 func (c *Cpu) Run(o *org.Organism) error {
+	Logger.Printf("%v.Run(%v)\n", c, o)
 	for {
 		if err := c.Step(o); err != nil {
+			Logger.Printf("%v.Run: %v\n", c, err)
+			o.Die()
 			return err
 		}
+		runtime.Gosched()
 	}
 }
 

@@ -23,6 +23,16 @@ type locator struct {
 	invalid bool
 }
 
+func (l *locator) String() string {
+	l.w.RLock()
+	defer l.w.RUnlock()
+	invalid := ""
+	if l.invalid {
+		invalid = " invalid"
+	}
+	return fmt.Sprintf("[%d,%d%s]", l.x, l.y, invalid)
+}
+
 func (l *locator) checkValid() {
 	if l.invalid {
 		panic("attempt to use an invalidated locator")

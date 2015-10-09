@@ -8,7 +8,6 @@
 package main
 
 import "flag"
-import "fmt"
 import "log"
 import "os"
 import "sync"
@@ -23,6 +22,7 @@ import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/driver/cpu1"
 
 var (
+	debug      bool
 	printWorld bool
 	printRate  float64
 	pprof      bool
@@ -31,7 +31,7 @@ var (
 func init() {
 	flag.BoolVar(&printWorld, "print", true, "render the world to the terminal")
 	flag.Float64Var(&printRate, "print_hz", 10.0, "refresh rate in Hz for --print")
-	//flag.BoolVar(&debug, "debug", false, "enable tracing")
+	flag.BoolVar(&debug, "debug", false, "enable tracing")
 	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
 }
 
@@ -41,6 +41,11 @@ func main() {
 		go func() {
 			log.Println(http.ListenAndServe("localhost:6060", nil))
 		}()
+	}
+	if debug {
+		cpu1.Logger = log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)
+		org.Logger = cpu1.Logger
+		grid2d.Logger = cpu1.Logger
 	}
 
 	exit := make(chan bool, 0)
@@ -52,19 +57,21 @@ func main() {
 	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)
 	g.Put(13, 13, energy.NewFood(8000), grid2d.PutAlways)
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
 		for {
 			c := cpu1.Random()
 			o := &org.Organism{Driver: c}
 			o.AddEnergy(1000)
 			if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
-				fmt.Printf("%v\n", c.Run(o))
+				c.Run(o)
 			}
 		}
 		close(exit)
+		wg.Done()
 	}()
-
-	var wg sync.WaitGroup
 
 	if printWorld {
 		dur := time.Duration(1.0/printRate) * time.Second

@@ -12,6 +12,8 @@ func defaultFn(o interface{}) rune {
 	switch o := o.(type) {
 	case *energy.Food:
 		return RuneForFood(o, 5000)
+	case *org.Organism:
+		return RuneForOrganism(o)
 	default:
 		return '?'
 	}

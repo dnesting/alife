@@ -3,8 +3,12 @@ package grid2d
 import "bytes"
 import "encoding/gob"
 import "fmt"
+import "io/ioutil"
+import "log"
 import "math/rand"
 import "sync"
+
+var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
 
 type PutWhenFunc func(existing, proposed interface{}) bool
 
@@ -49,6 +53,10 @@ func New(width, height int, done <-chan bool) Grid {
 		height:   height,
 		data:     make([]*locator, width*height),
 	}
+}
+
+func (g *grid) String() string {
+	return fmt.Sprintf("[grid %d,%d]", g.width, g.height)
 }
 
 func (g *grid) Extents() (int, int) {
@@ -114,6 +122,7 @@ func shouldPut(fn PutWhenFunc, a, b interface{}) bool {
 }
 
 func (g *grid) putLocked(x, y int, n interface{}, fn PutWhenFunc) (interface{}, *locator) {
+	Logger.Printf("%v.putLocked(%d,%d, %v)\n", g, x, y, n)
 	origLoc := g.getLocked(x, y)
 	origValue := origLoc.Value()
 	if !shouldPut(fn, origValue, n) {
@@ -132,6 +141,7 @@ func (g *grid) putLocked(x, y int, n interface{}, fn PutWhenFunc) (interface{}, 
 }
 
 func (g *grid) moveLocked(x1, y1, x2, y2 int, fn PutWhenFunc) (interface{}, bool) {
+	Logger.Printf("%v.moveLocked(%d,%d, %d,%d)\n", g, x1, y1, x2, y2)
 	src := g.getLocked(x1, y1)
 	dst := g.getLocked(x2, y2)
 	if !shouldPut(fn, src.Value(), dst.Value()) {
@@ -171,6 +181,7 @@ func (g *grid) Locations() (int, int, []Point) {
 }
 
 func (g *grid) Resize(width, height int, removedFn func(x, y int, o interface{})) {
+	Logger.Printf("%g.Resize(%d,%d)\n", width, height)
 	g.Lock()
 	defer g.Unlock()
 
