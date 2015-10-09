@@ -49,17 +49,13 @@ func main() {
 	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)
 	g.Put(13, 13, energy.NewFood(8000), grid2d.PutAlways)
 
-	g.Remove(10, 10)
-	g.Remove(11, 11)
-	g.Remove(12, 12)
-
 	var wg sync.WaitGroup
 
 	if printWorld {
 		dur := time.Duration(1.0/printRate) * time.Second
 		wg.Add(1)
 		go func() {
-			term.Printer(os.Stdout, g, nil, dur, exit)
+			term.Printer(os.Stdout, g, nil, dur)
 			wg.Done()
 		}()
 	}
