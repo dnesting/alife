@@ -118,6 +118,7 @@ func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, tty bool, mi
 		}
 		printWorld(w, locs, width, height, fn)
 		locs = nil
+		timeCh = nil
 	}
 
 	doUpdate := func() {
