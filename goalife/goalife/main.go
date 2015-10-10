@@ -27,11 +27,12 @@ import "github.com/dnesting/alife/goalife/world/grid2d"
 var Logger = log.Null()
 
 var (
-	debug      bool
-	printWorld bool
-	printRate  float64
-	pprof      bool
-	minOrgs    int
+	debug        bool
+	printWorld   bool
+	printRate    float64
+	pprof        bool
+	minOrgs      int
+	syncToRender bool
 )
 
 func init() {
@@ -40,6 +41,7 @@ func init() {
 	flag.BoolVar(&debug, "debug", false, "enable tracing")
 	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
 	flag.IntVar(&minOrgs, "min", 50, "maintain this many organisms at a minimum")
+	flag.BoolVar(&syncToRender, "sync", false, "sync world updates to rendering")
 }
 
 func startOrg(g grid2d.Grid) {
@@ -48,7 +50,10 @@ func startOrg(g grid2d.Grid) {
 	o.AddEnergy(1000)
 	for {
 		if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
-			go c.Run(o)
+			go func() {
+				g.Wait()
+				c.Run(o)
+			}()
 			// go func() {
 			// 	if err := c.Run(o); err != nil {
 			// 		Logger.Printf("org exited: %v\n", err)
@@ -81,8 +86,8 @@ func main() {
 		Logger = l
 		//cpu1.Logger = l
 		//org.Logger = l
-		//grid2d.Logger = l
-		maintain.Logger = l
+		grid2d.Logger = l
+		//maintain.Logger = l
 	}
 	if pprof {
 		go func() {
@@ -92,7 +97,12 @@ func main() {
 
 	exit := make(chan bool, 0)
 
-	g := grid2d.New(200, 50, exit)
+	var cond *sync.Cond
+	if syncToRender {
+		cond = sync.NewCond(&sync.Mutex{})
+	}
+
+	g := grid2d.New(200, 50, exit, cond)
 
 	var ch chan []grid2d.Update
 	ch = make(chan []grid2d.Update, 0)
@@ -113,10 +123,10 @@ func main() {
 	wg.Add(1)
 
 	if printWorld {
-		dur := time.Duration(1.0/printRate) * time.Second
+		dur := time.Duration(1000000.0/printRate) * time.Microsecond
 		wg.Add(1)
 		go func() {
-			term.Printer(os.Stdout, g, nil, !debug, dur)
+			term.Printer(os.Stdout, g, nil, !debug, dur, cond)
 			wg.Done()
 		}()
 	}

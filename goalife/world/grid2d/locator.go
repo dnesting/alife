@@ -69,21 +69,22 @@ func (l *locator) Get(dx, dy int) Locator {
 
 func (l *locator) Put(dx, dy int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	l.w.Lock()
-	defer l.w.Unlock()
 	l.checkValid()
 	l.checkLocationInvariant()
 	x, y := l.delta(dx, dy)
 	orig, loc := l.w.putLocked(x, y, n, fn)
 	if loc != nil {
 		l.w.RecordAdd(x, y, n)
+		l.w.Unlock()
+		l.w.Wait()
 		return orig, loc
 	}
+	l.w.Unlock()
 	return orig, nil
 }
 
 func (l *locator) Move(dx, dy int, fn PutWhenFunc) (interface{}, bool) {
 	l.w.Lock()
-	defer l.w.Unlock()
 	l.checkValid()
 	l.checkLocationInvariant()
 	x2, y2 := l.delta(dx, dy)
@@ -92,12 +93,17 @@ func (l *locator) Move(dx, dy int, fn PutWhenFunc) (interface{}, bool) {
 	l.checkValid()
 	l.checkLocationInvariant()
 
+	l.w.Unlock()
+
+	if ok {
+		l.w.Wait()
+	}
+
 	return orig, ok
 }
 
 func (l *locator) Replace(n interface{}) Locator {
 	l.w.Lock()
-	defer l.w.Unlock()
 	l.checkValid()
 	l.checkLocationInvariant()
 	old := l.v
@@ -107,19 +113,23 @@ func (l *locator) Replace(n interface{}) Locator {
 		} else {
 			l.w.RecordReplace(l.x, l.y, old, n)
 		}
+		l.w.Unlock()
+		l.w.Wait()
 		return loc
 	}
+	l.w.Unlock()
 	return nil
 }
 
 func (l *locator) Remove() {
 	l.w.Lock()
-	defer l.w.Unlock()
 	if l.invalid {
 		return
 	}
 	l.checkLocationInvariant()
 	l.Replace(nil)
+	l.w.Unlock()
+	l.w.Wait()
 }
 
 func (l *locator) invalidate() {

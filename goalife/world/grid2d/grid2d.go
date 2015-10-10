@@ -17,6 +17,7 @@ var PutAlways PutWhenFunc = func(_, _ interface{}) bool {
 }
 
 var PutWhenNil PutWhenFunc = func(a, _ interface{}) bool {
+	Logger.Printf("PutWhenNil(%v) == nil? %v\n", a, a == nil)
 	return a == nil
 }
 
@@ -34,6 +35,7 @@ type Grid interface {
 	All() []Locator
 	Locations() (int, int, []Point)
 	Resize(width, height int, removedFn func(x, y int, o interface{}))
+	Wait()
 
 	Subscribe(ch chan<- []Update)
 	Unsubscribe(ch chan<- []Update)
@@ -41,13 +43,15 @@ type Grid interface {
 
 type grid struct {
 	sync.RWMutex
+	cond *sync.Cond
 	*notifier
 	width, height int
 	data          []*locator
 }
 
-func New(width, height int, done <-chan bool) Grid {
+func New(width, height int, done <-chan bool, cond *sync.Cond) Grid {
 	return &grid{
+		cond:     cond,
 		notifier: newNotifier(done),
 		width:    width,
 		height:   height,
@@ -88,6 +92,14 @@ func (g *grid) getLocked(x, y int) *locator {
 func (g *grid) Remove(x, y int) interface{} {
 	o, _ := g.Put(x, y, nil, PutAlways)
 	return o
+}
+
+func (g *grid) Wait() {
+	if g.cond != nil {
+		g.cond.L.Lock()
+		g.cond.Wait()
+		g.cond.L.Unlock()
+	}
 }
 
 func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
@@ -144,7 +156,7 @@ func (g *grid) moveLocked(x1, y1, x2, y2 int, fn PutWhenFunc) (interface{}, bool
 	Logger.Printf("%v.moveLocked(%d,%d, %d,%d)\n", g, x1, y1, x2, y2)
 	src := g.getLocked(x1, y1)
 	dst := g.getLocked(x2, y2)
-	if !shouldPut(fn, src.Value(), dst.Value()) {
+	if !shouldPut(fn, dst.Value(), src.Value()) {
 		return dst.Value(), false
 	}
 	dst.invalidate()
