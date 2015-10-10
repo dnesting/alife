@@ -3,12 +3,12 @@ package grid2d
 import "bytes"
 import "encoding/gob"
 import "fmt"
-import "io/ioutil"
-import "log"
 import "math/rand"
 import "sync"
 
-var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+import "github.com/dnesting/alife/goalife/log"
+
+var Logger = log.Null()
 
 type PutWhenFunc func(existing, proposed interface{}) bool
 

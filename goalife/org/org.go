@@ -2,20 +2,19 @@ package org
 
 import "errors"
 import "fmt"
-import "log"
-import "io/ioutil"
 import "math"
 import "math/rand"
 import "sync"
 
 import "github.com/dnesting/alife/goalife/energy"
 import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/log"
 
 const BodyEnergy = 100
 const SenseFalloffExp = 2
 const SenseDistance = 10
 
-var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+var Logger = log.Null()
 
 type Organism struct {
 	energy.Battery

@@ -2,13 +2,12 @@ package cpu1
 
 import "errors"
 import "fmt"
-import "io/ioutil"
-import "log"
 import "runtime"
 
 import "github.com/dnesting/alife/goalife/org"
+import "github.com/dnesting/alife/goalife/log"
 
-var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+var Logger = log.Null()
 
 // Cpu is a simple 8-bit CPU with 4 registers.
 type Cpu struct {

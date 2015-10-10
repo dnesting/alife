@@ -8,8 +8,6 @@
 package main
 
 import "flag"
-import "log"
-import "io/ioutil"
 import "os"
 import "sync"
 import "time"
@@ -21,11 +19,12 @@ import "github.com/dnesting/alife/goalife/driver/cpu1"
 import "github.com/dnesting/alife/goalife/energy"
 
 import "github.com/dnesting/alife/goalife/maintain"
+import "github.com/dnesting/alife/goalife/log"
 import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/term"
 import "github.com/dnesting/alife/goalife/world/grid2d"
 
-var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+var Logger = log.Null()
 
 var (
 	debug      bool
@@ -78,7 +77,7 @@ func orgHash(o interface{}) *census.Key {
 func main() {
 	flag.Parse()
 	if debug {
-		l := log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)
+		l := log.Real()
 		Logger = l
 		//cpu1.Logger = l
 		//org.Logger = l

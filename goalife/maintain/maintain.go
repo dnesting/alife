@@ -1,11 +1,9 @@
 package maintain
 
-import "io/ioutil"
-import "log"
-
 import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/log"
 
-var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+var Logger = log.Null()
 
 func Maintain(ch <-chan []grid2d.Update, counterFn func(o interface{}) bool, fn func(), keep int) {
 	//ready := make(chan bool)
