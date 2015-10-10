@@ -127,7 +127,9 @@ func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, tty bool, mi
 		if due.Before(now) {
 			doPrint(now)
 		} else {
-			timeCh = time.After(due.Sub(now))
+			if timeCh == nil {
+				timeCh = time.After(due.Sub(now))
+			}
 		}
 	}
 

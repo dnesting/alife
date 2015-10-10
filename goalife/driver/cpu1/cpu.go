@@ -22,7 +22,7 @@ func (c *Cpu) String() string {
 
 func (c *Cpu) Copy() *Cpu {
 	return &Cpu{
-		Code: c.Code.Copy(),
+		Code: c.Code,
 	}
 }
 
