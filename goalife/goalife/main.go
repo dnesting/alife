@@ -16,11 +16,13 @@ import "net/http"
 import _ "net/http/pprof"
 
 import "github.com/dnesting/alife/goalife/census"
+import "github.com/dnesting/alife/goalife/driver/cpu1"
 import "github.com/dnesting/alife/goalife/energy"
+
+import "github.com/dnesting/alife/goalife/maintain"
+import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/term"
 import "github.com/dnesting/alife/goalife/world/grid2d"
-import "github.com/dnesting/alife/goalife/org"
-import "github.com/dnesting/alife/goalife/driver/cpu1"
 
 var (
 	debug      bool
@@ -34,6 +36,20 @@ func init() {
 	flag.Float64Var(&printRate, "print_hz", 10.0, "refresh rate in Hz for --print")
 	flag.BoolVar(&debug, "debug", false, "enable tracing")
 	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
+}
+
+func startOrg(g grid2d.Grid) {
+	c := cpu1.Random()
+	o := &org.Organism{Driver: c}
+	o.AddEnergy(1000)
+	if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
+		go c.Run(o)
+	}
+}
+
+func isOrg(o interface{}) bool {
+	_, ok := o.(*org.Organism)
+	return ok
 }
 
 func orgHash(o interface{}) *census.Key {
@@ -50,23 +66,30 @@ func main() {
 	flag.Parse()
 	if pprof {
 		go func() {
-			log.Println(http.ListenAndServe("localhost:6060", nil))
+			log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
 		}()
 	}
 	if debug {
-		cpu1.Logger = log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)
-		org.Logger = cpu1.Logger
-		grid2d.Logger = cpu1.Logger
+		l := log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)
+		cpu1.Logger = l
+		org.Logger = l
+		grid2d.Logger = l
+		maintain.Logger = l
 	}
 
 	exit := make(chan bool, 0)
 
 	g := grid2d.New(200, 50, exit)
 
-	ch := make(chan []grid2d.Update, 0)
+	var ch chan []grid2d.Update
+	ch = make(chan []grid2d.Update, 0)
 	g.Subscribe(ch)
 	cns := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
 	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
+
+	ch = make(chan []grid2d.Update, 0)
+	g.Subscribe(ch)
+	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, 10)
 
 	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
 	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)
@@ -74,26 +97,13 @@ func main() {
 	g.Put(13, 13, energy.NewFood(8000), grid2d.PutAlways)
 
 	var wg sync.WaitGroup
-
 	wg.Add(1)
-	go func() {
-		for {
-			c := cpu1.Random()
-			o := &org.Organism{Driver: c}
-			o.AddEnergy(1000)
-			if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
-				c.Run(o)
-			}
-		}
-		close(exit)
-		wg.Done()
-	}()
 
 	if printWorld {
 		dur := time.Duration(1.0/printRate) * time.Second
 		wg.Add(1)
 		go func() {
-			term.Printer(os.Stdout, g, nil, true, dur)
+			term.Printer(os.Stdout, g, nil, !debug, dur)
 			wg.Done()
 		}()
 	}

@@ -24,8 +24,6 @@ type locator struct {
 }
 
 func (l *locator) String() string {
-	l.w.RLock()
-	defer l.w.RUnlock()
 	invalid := ""
 	if l.invalid {
 		invalid = " invalid"

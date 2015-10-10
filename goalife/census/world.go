@@ -9,12 +9,12 @@ func WatchWorld(c Census, ch <-chan []grid2d.Update, timeFn func() interface{}, 
 		}
 		for _, u := range updates {
 			if u.IsAdd() || u.IsReplace() {
-				if key := keyFn(u.New); key != nil {
+				if key := keyFn(u.New.V); key != nil {
 					c.Add(timeFn(), *key)
 				}
 			}
 			if u.IsRemove() || u.IsReplace() {
-				if key := keyFn(u.Old); key != nil {
+				if key := keyFn(u.Old.V); key != nil {
 					c.Remove(timeFn(), *key)
 				}
 			}
