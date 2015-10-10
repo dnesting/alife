@@ -86,7 +86,7 @@ func main() {
 	}
 	if pprof {
 		go func() {
-			Logger.Println(http.ListenAndServe("127.0.0.1:6060", nil))
+			Logger.Println(http.ListenAndServe("0.0.0.0:6060", nil))
 		}()
 	}
 
