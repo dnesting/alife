@@ -9,6 +9,7 @@ package main
 
 import "flag"
 import "log"
+import "io/ioutil"
 import "os"
 import "sync"
 import "time"
@@ -24,11 +25,14 @@ import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/term"
 import "github.com/dnesting/alife/goalife/world/grid2d"
 
+var Logger = log.New(ioutil.Discard, "", log.LstdFlags|log.Lshortfile)
+
 var (
 	debug      bool
 	printWorld bool
 	printRate  float64
 	pprof      bool
+	minOrgs    int
 )
 
 func init() {
@@ -36,14 +40,23 @@ func init() {
 	flag.Float64Var(&printRate, "print_hz", 10.0, "refresh rate in Hz for --print")
 	flag.BoolVar(&debug, "debug", false, "enable tracing")
 	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
+	flag.IntVar(&minOrgs, "min", 50, "maintain this many organisms at a minimum")
 }
 
 func startOrg(g grid2d.Grid) {
 	c := cpu1.Random()
 	o := &org.Organism{Driver: c}
 	o.AddEnergy(1000)
-	if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
-		go c.Run(o)
+	for {
+		if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
+			go c.Run(o)
+			// go func() {
+			// 	if err := c.Run(o); err != nil {
+			// 		Logger.Printf("org exited: %v\n", err)
+			// 	}
+			// }()
+			break
+		}
 	}
 }
 
@@ -64,17 +77,18 @@ func orgHash(o interface{}) *census.Key {
 
 func main() {
 	flag.Parse()
-	if pprof {
-		go func() {
-			log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
-		}()
-	}
 	if debug {
 		l := log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile)
-		cpu1.Logger = l
-		org.Logger = l
-		grid2d.Logger = l
+		Logger = l
+		//cpu1.Logger = l
+		//org.Logger = l
+		//grid2d.Logger = l
 		maintain.Logger = l
+	}
+	if pprof {
+		go func() {
+			Logger.Println(http.ListenAndServe("127.0.0.1:6060", nil))
+		}()
 	}
 
 	exit := make(chan bool, 0)
@@ -89,7 +103,7 @@ func main() {
 
 	ch = make(chan []grid2d.Update, 0)
 	g.Subscribe(ch)
-	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, 10)
+	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs)
 
 	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
 	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)

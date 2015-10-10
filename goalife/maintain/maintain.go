@@ -28,22 +28,18 @@ func loop(ch <-chan []grid2d.Update, counterFn func(o interface{}) bool, fn func
 			if u.IsAdd() || u.IsReplace() {
 				if counterFn(u.New.V) {
 					count++
-					Logger.Printf("%v add counted toward total of %d\n", u.New.V, count)
-				} else {
-					Logger.Printf("%v add not counted\n", u.New.V)
+					Logger.Printf("%v added, count %d\n", u.New.V, count)
 				}
 			}
 			if u.IsRemove() || u.IsReplace() {
 				if counterFn(u.Old.V) {
 					count--
 					if count < keep {
-						Logger.Printf("%v remove counted toward total of %d, adding one\n", u.Old.V, count)
+						Logger.Printf("%v removed, count %d, adding one\n", u.Old.V, count)
 						go fn()
 					} else {
-						Logger.Printf("%v remove counted toward total of %d\n", u.Old.V, count)
+						Logger.Printf("%v removed, count %d\n", u.Old.V, count)
 					}
-				} else {
-					Logger.Printf("%v remove not counted\n", u.Old.V)
 				}
 			}
 		}
