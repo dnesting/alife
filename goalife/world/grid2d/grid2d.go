@@ -42,7 +42,7 @@ type Grid interface {
 	PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator)
 	Remove(x, y int) interface{}
 	All() []Locator
-	Locations(points *[]Point) (int, int)
+	Locations(points *[]Point) (int, int, int)
 	Resize(width, height int, removedFn func(x, y int, o interface{}))
 	Wait()
 
@@ -120,7 +120,20 @@ func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locato
 func (g *grid) PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	g.Lock()
 	defer g.Unlock()
-	return g.putLockedWithNotify(rand.Intn(g.width), rand.Intn(g.height), n, fn)
+	var retry int
+	for {
+		orig, loc := g.putLockedWithNotify(rand.Intn(g.width), rand.Intn(g.height), n, fn)
+		if loc != nil {
+			return orig, loc
+		}
+		retry += 1
+		if retry%10 == 0 {
+			_, _, count := g.locationsLocked(nil)
+			if count >= g.width*g.height {
+				return nil, nil
+			}
+		}
+	}
 }
 
 func (g *grid) putLockedWithNotify(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
@@ -189,19 +202,29 @@ func (g *grid) All() []Locator {
 	return locs
 }
 
-func (g *grid) Locations(points *[]Point) (int, int) {
+func (g *grid) Locations(points *[]Point) (int, int, int) {
 	g.RLock()
 	defer g.RUnlock()
-	if cap(*points) < g.width*g.height {
-		*points = make([]Point, 0, g.width*g.height)
+	return g.locationsLocked(points)
+}
+
+func (g *grid) locationsLocked(points *[]Point) (int, int, int) {
+	var count int
+	if points != nil {
+		if cap(*points) < g.width*g.height {
+			*points = make([]Point, 0, g.width*g.height)
+		}
+		*points = (*points)[:0]
 	}
-	*points = (*points)[:0]
 	for _, l := range g.data {
 		if l != nil {
-			*points = append(*points, Point{l.x, l.y, l.v})
+			if points != nil {
+				*points = append(*points, Point{l.x, l.y, l.v})
+			}
+			count++
 		}
 	}
-	return g.width, g.height
+	return g.width, g.height, count
 }
 
 func (g *grid) Resize(width, height int, removedFn func(x, y int, o interface{})) {
@@ -237,7 +260,7 @@ var gobData gobStruct
 func (g *grid) GobEncode() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
-	width, height := g.Locations(&gobData.Points)
+	width, height, _ := g.Locations(&gobData.Points)
 	gobData.Width = width
 	gobData.Height = height
 	if err := enc.Encode(gobData); err != nil {

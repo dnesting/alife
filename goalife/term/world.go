@@ -79,7 +79,7 @@ var locPool = sync.Pool{New: func() interface{} { return make([]grid2d.Point, 0)
 
 func PrintWorld(w io.Writer, g grid2d.Grid) {
 	points := locPool.Get().([]grid2d.Point)
-	width, height := g.Locations(&points)
+	width, height, _ := g.Locations(&points)
 	sort.Sort(byCoordinate(points))
 
 	iy, ix := 0, -1

@@ -56,12 +56,10 @@ func startOrg(g grid2d.Grid) {
 			go func() {
 				g.Wait()
 				c.Run(o)
+				//if err := c.Run(o); err != nil {
+				//	Logger.Printf("org exited: %v\n", err)
+				//}
 			}()
-			// go func() {
-			// 	if err := c.Run(o); err != nil {
-			// 		Logger.Printf("org exited: %v\n", err)
-			// 	}
-			// }()
 			break
 		}
 	}

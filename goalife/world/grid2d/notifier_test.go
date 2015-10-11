@@ -6,21 +6,18 @@ import "testing"
 func TestNotify(t *testing.T) {
 	doneCh := make(chan bool)
 	defer close(doneCh)
-	n := newNotifier(doneCh)
 
 	tAdd := []Update{
 		Update{
 			New: &Point{1, 2, 10},
 		},
 	}
-	n.RecordAdd(1, 2, 10)
 
 	tRemove := []Update{
 		Update{
 			Old: &Point{1, 2, 10},
 		},
 	}
-	n.RecordRemove(1, 2, 10)
 
 	tMove := []Update{
 		Update{
@@ -28,7 +25,6 @@ func TestNotify(t *testing.T) {
 			New: &Point{2, 2, 10},
 		},
 	}
-	n.RecordMove(1, 1, 2, 2, 10)
 
 	tReplace := []Update{
 		Update{
@@ -36,10 +32,18 @@ func TestNotify(t *testing.T) {
 			New: &Point{1, 1, 11},
 		},
 	}
-	n.RecordReplace(1, 1, 10, 11)
+
+	n := newNotifier(doneCh)
+
+	go func() {
+		n.RecordAdd(1, 2, 10)
+		n.RecordRemove(1, 2, 10)
+		n.RecordMove(1, 1, 2, 2, 10)
+		n.RecordReplace(1, 1, 10, 11)
+	}()
 
 	ch := make(chan []Update)
-	n.Subscribe(ch)
+	n.Subscribe(ch, Unbuffered)
 
 	got := <-ch
 	if !reflect.DeepEqual(got, tAdd) {

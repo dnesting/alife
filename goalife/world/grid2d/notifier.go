@@ -3,12 +3,10 @@ package grid2d
 import "fmt"
 import "container/list"
 import "sync"
-import "time"
 
 type Update struct {
-	Old       *Point
-	New       *Point
-	Timestamp time.Time
+	Old *Point
+	New *Point
 }
 
 func (u Update) IsAdd() bool {
@@ -158,33 +156,29 @@ func (n *notifier) Unsubscribe(ch chan<- []Update) {
 func (n *notifier) RecordAdd(x, y int, value interface{}) {
 	n.add([]Update{
 		Update{
-			New:       &Point{x, y, value},
-			Timestamp: time.Now(),
+			New: &Point{x, y, value},
 		}})
 }
 
 func (n *notifier) RecordRemove(x, y int, value interface{}) {
 	n.add([]Update{
 		Update{
-			Old:       &Point{x, y, value},
-			Timestamp: time.Now(),
+			Old: &Point{x, y, value},
 		}})
 }
 
 func (n *notifier) RecordMove(x1, y1, x2, y2 int, value interface{}) {
 	n.add([]Update{
 		Update{
-			Old:       &Point{x1, y1, value},
-			New:       &Point{x2, y2, value},
-			Timestamp: time.Now(),
+			Old: &Point{x1, y1, value},
+			New: &Point{x2, y2, value},
 		}})
 }
 
 func (n *notifier) RecordReplace(x, y int, orig, repl interface{}) {
 	n.add([]Update{Update{
-		Old:       &Point{x, y, orig},
-		New:       &Point{x, y, repl},
-		Timestamp: time.Now(),
+		Old: &Point{x, y, orig},
+		New: &Point{x, y, repl},
 	}})
 }
 

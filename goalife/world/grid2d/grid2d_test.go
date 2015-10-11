@@ -123,26 +123,39 @@ func TestResize(t *testing.T) {
 
 func TestLocations(t *testing.T) {
 	g := New(3, 3, nil, nil)
-	_, _, locs := g.Locations()
+	var locs []Point
+	_, _, count := g.Locations(&locs)
 	if len(locs) != 0 {
-		t.Errorf("Locations() should have returned an empty slice on an empty grid, got %v", locs)
+		t.Errorf("Locations() should have kept an empty slice on an empty grid, got %v", locs)
+	}
+	if count != 0 {
+		t.Errorf("Locations() count should have been 0, got %v", count)
 	}
 
 	g.Put(1, 2, 10, PutAlways)
-	_, _, locs = g.Locations()
+	_, _, count = g.Locations(&locs)
 	if len(locs) != 1 {
 		t.Errorf("Locations() should return one element when one field is occupied, got %v", len(locs))
+	}
+	if count != 1 {
+		t.Errorf("Locations() count should have been 1, got %v", count)
 	}
 	expected := Point{1, 2, 10}
 	if !reflect.DeepEqual(locs[0], expected) {
 		t.Errorf("Locations() should have returned a one-element slice, expected %v got %v", expected, locs[0])
+	}
+
+	_, _, count = g.Locations(nil)
+	if count != 1 {
+		t.Errorf("Locations() count on a nil slice argument should have been 1, got %v", count)
 	}
 }
 
 func TestGob(t *testing.T) {
 	g := New(3, 3, nil, nil)
 	g.Put(1, 2, 10, PutAlways)
-	w, h, locs := g.Locations()
+	var locs []Point
+	w, h, _ := g.Locations(&locs)
 
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
@@ -152,7 +165,8 @@ func TestGob(t *testing.T) {
 
 	dec := gob.NewDecoder(&b)
 	g2 := New(0, 0, nil, nil)
-	w2, h2, locs2 := g2.Locations()
+	var locs2 []Point
+	w2, h2, _ := g2.Locations(&locs2)
 	if w2 != 0 || h2 != 0 || len(locs2) != 0 {
 		t.Errorf("zero value for Grid is not zero, got (%d,%d) and locations=%v", w2, h2, locs2)
 	}
@@ -161,7 +175,7 @@ func TestGob(t *testing.T) {
 		t.Fatalf("error decoding: %v", err)
 	}
 
-	w2, h2, locs2 = g2.Locations()
+	w2, h2, _ = g2.Locations(&locs2)
 	if w != w2 {
 		t.Errorf("decoded grid has wrong width, expected %d got %d", w, w2)
 	}
