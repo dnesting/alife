@@ -6,7 +6,7 @@ import "reflect"
 import "testing"
 
 func TestBasic(t *testing.T) {
-	g := New(5, 10, nil)
+	g := New(5, 10, nil, nil)
 
 	if g.Get(1, 1) != nil {
 		t.Errorf("Get(1,1) should result in nil, got %v", g.Get(1, 1))
@@ -22,7 +22,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestPut(t *testing.T) {
-	g := New(2, 2, nil)
+	g := New(2, 2, nil, nil)
 	orig, loc := g.Put(0, 0, 10, PutAlways)
 	if orig != nil {
 		t.Errorf("Put() on an empty spot should have nil orig value, got %v", orig)
@@ -49,7 +49,7 @@ func TestPut(t *testing.T) {
 }
 
 func TestPut2(t *testing.T) {
-	g := New(2, 2, nil)
+	g := New(2, 2, nil, nil)
 	_, loc := g.Put(0, 0, 10, PutAlways)
 	orig, loc2 := g.Put(0, 0, 15, PutAlways)
 	if orig != loc.Value() {
@@ -70,7 +70,7 @@ func TestPut2(t *testing.T) {
 }
 
 func TestPutWhenNil(t *testing.T) {
-	g := New(2, 2, nil)
+	g := New(2, 2, nil, nil)
 	_, loc := g.Put(0, 0, 10, PutAlways)
 	_, loc2 := g.Put(0, 0, 15, PutWhenNil)
 	if loc2 != nil {
@@ -85,7 +85,7 @@ func TestPutWhenNil(t *testing.T) {
 }
 
 func TestAll(t *testing.T) {
-	g := New(2, 2, nil)
+	g := New(2, 2, nil, nil)
 	all := g.All()
 	if len(all) != 0 {
 		t.Errorf("All() should have returned an empty slice on an empty grid, got %v", all)
@@ -107,7 +107,7 @@ func TestAll(t *testing.T) {
 }
 
 func TestResize(t *testing.T) {
-	g := New(3, 3, nil)
+	g := New(3, 3, nil, nil)
 	g.Put(1, 2, 10, PutAlways)
 	var ran bool
 	g.Resize(2, 2, func(x, y int, o interface{}) {
@@ -122,7 +122,7 @@ func TestResize(t *testing.T) {
 }
 
 func TestLocations(t *testing.T) {
-	g := New(3, 3, nil)
+	g := New(3, 3, nil, nil)
 	_, _, locs := g.Locations()
 	if len(locs) != 0 {
 		t.Errorf("Locations() should have returned an empty slice on an empty grid, got %v", locs)
@@ -140,7 +140,7 @@ func TestLocations(t *testing.T) {
 }
 
 func TestGob(t *testing.T) {
-	g := New(3, 3, nil)
+	g := New(3, 3, nil, nil)
 	g.Put(1, 2, 10, PutAlways)
 	w, h, locs := g.Locations()
 
@@ -151,7 +151,7 @@ func TestGob(t *testing.T) {
 	}
 
 	dec := gob.NewDecoder(&b)
-	g2 := New(0, 0, nil)
+	g2 := New(0, 0, nil, nil)
 	w2, h2, locs2 := g2.Locations()
 	if w2 != 0 || h2 != 0 || len(locs2) != 0 {
 		t.Errorf("zero value for Grid is not zero, got (%d,%d) and locations=%v", w2, h2, locs2)
