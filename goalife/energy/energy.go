@@ -1,7 +1,7 @@
 package energy
 
 import "fmt"
-import "sync"
+import "sync/atomic"
 
 // Energetic describes types that have some notion of stored energy.
 // The energy level should never drop below zero.
@@ -25,8 +25,7 @@ var Null = nullEnergy{}
 // Battery is a simple implementation of Energetic that just stores a
 // count of available energy. Its value must never be set below zero.
 type Battery struct {
-	mu sync.RWMutex
-	V  int
+	V int32
 }
 
 func (e *Battery) String() string {
@@ -35,16 +34,11 @@ func (e *Battery) String() string {
 
 // Energy returns the current amount of energy.
 func (e *Battery) Energy() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	return e.V
+	return int(atomic.LoadInt32(&e.V))
 }
 
 func (e *Battery) Reset(amt int) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.V = amt
+	atomic.StoreInt32(&e.V, int32(amt))
 }
 
 // AddEnergy adds the given amt to the battery. amt may be negative
@@ -52,15 +46,16 @@ func (e *Battery) Reset(amt int) {
 // will never drop below zero.  Returns the actual amount of adjustment,
 // and the new energy level.
 func (e *Battery) AddEnergy(amt int) (adj int, newLevel int) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	v := e.V + amt
-	nv := v
-	if nv < 0 {
-		nv = 0
-		amt -= v
+	for {
+		orig := atomic.LoadInt32(&e.V)
+		v := orig + int32(amt)
+		nv := v
+		if nv < 0 {
+			nv = 0
+			amt -= int(v)
+		}
+		if atomic.CompareAndSwapInt32(&e.V, orig, nv) {
+			return amt, int(nv)
+		}
 	}
-	e.V = nv
-	return amt, e.V
 }
