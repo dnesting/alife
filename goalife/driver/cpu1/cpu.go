@@ -2,7 +2,6 @@ package cpu1
 
 import "errors"
 import "fmt"
-import "runtime"
 
 import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/log"
@@ -72,7 +71,6 @@ func (c *Cpu) Run(o *org.Organism) error {
 			o.Die()
 			return err
 		}
-		runtime.Gosched()
 	}
 }
 

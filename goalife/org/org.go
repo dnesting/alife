@@ -5,6 +5,7 @@ import "fmt"
 import "math"
 import "math/rand"
 import "sync"
+import "runtime"
 
 import "github.com/dnesting/alife/goalife/energy"
 import "github.com/dnesting/alife/goalife/world/grid2d"
@@ -36,19 +37,22 @@ func (o *Organism) UseLocator(loc grid2d.Locator) {
 func (o *Organism) Left() {
 	Logger.Printf("%v.Left()\n", o)
 	o.Lock()
-	defer o.Unlock()
 
 	o.Dir -= 1
 	if o.Dir < 0 {
 		o.Dir = 7
 	}
+
+	o.Unlock()
+	runtime.Gosched()
 }
 
 func (o *Organism) Right() {
 	Logger.Printf("%v.Right()\n", o)
 	o.Lock()
-	defer o.Unlock()
 	o.Dir = (o.Dir + 1) % 8
+	o.Unlock()
+	runtime.Gosched()
 }
 
 var ErrNoEnergy = errors.New("out of energy")
@@ -64,6 +68,7 @@ func (o *Organism) Discharge(amt int) error {
 func (o *Organism) Die() {
 	Logger.Printf("%v.Die()\n", o)
 	o.loc.Replace(energy.NewFood(o.Energy() + BodyEnergy))
+	runtime.Gosched()
 }
 
 func (o *Organism) delta(dist int) (int, int) {
@@ -99,6 +104,7 @@ func (o *Organism) Forward() error {
 	}
 	dx, dy := o.delta(1)
 	if _, ok := o.loc.Move(dx, dy, grid2d.PutWhenNil); ok {
+		runtime.Gosched()
 		return nil
 	}
 	return ErrNotEmpty
@@ -130,6 +136,7 @@ func (o *Organism) Divide(driver interface{}, energyFrac float64) (*Organism, er
 	if _, loc := o.loc.Put(dx, dy, n, PutWhenFood); loc != nil {
 		amt, _ := o.AddEnergy(-int(float64(o.Energy()) * energyFrac))
 		n.AddEnergy(-amt)
+		runtime.Gosched()
 		return n, nil
 	}
 	return nil, ErrNotEmpty
@@ -148,6 +155,7 @@ func (o *Organism) Sense(fn func(o interface{}) float64) float64 {
 			}
 		}
 	}
+	runtime.Gosched()
 	return e
 }
 
@@ -161,6 +169,7 @@ func (o *Organism) Eat(amt int) (int, error) {
 		if n, ok := n.(energy.Energetic); ok {
 			amt, _ := n.AddEnergy(-amt)
 			o.AddEnergy(-amt)
+			runtime.Gosched()
 			return -amt, nil
 		}
 	}
