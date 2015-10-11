@@ -101,52 +101,20 @@ func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn RuneFu
 }
 
 func Printer(w io.Writer, g grid2d.Grid, runeFn func(interface{}) rune, tty bool, minFreq time.Duration, afterFn func()) {
-	var due time.Time
-	var timeCh <-chan time.Time
 	updateCh := make(chan []grid2d.Update, 0)
-
 	g.Subscribe(updateCh)
 	defer g.Unsubscribe(updateCh)
 
-	var locs []grid2d.Point
-	var width, height int
+	queue := grid2d.NotifyAsQueue(grid2d.RateLimited(updateCh, minFreq, 0))
 
-	doPrint := func(now time.Time) {
-		due = now.Add(minFreq)
+	for queue.Next() != nil {
+		width, height, locs := g.Locations()
 		if tty {
 			io.WriteString(w, "[H")
 		}
 		printWorld(w, locs, width, height, runeFn)
 		if afterFn != nil {
 			afterFn()
-		}
-		locs = nil
-		timeCh = nil
-	}
-
-	doUpdate := func() {
-		width, height, locs = g.Locations()
-		now := time.Now()
-		if due.Before(now) {
-			doPrint(now)
-		} else {
-			if timeCh == nil {
-				timeCh = time.After(due.Sub(now))
-			}
-		}
-	}
-
-	doUpdate()
-
-	for {
-		select {
-		case u := <-updateCh:
-			if u == nil {
-				return
-			}
-			doUpdate()
-		case <-timeCh:
-			doPrint(time.Now())
 		}
 	}
 }
