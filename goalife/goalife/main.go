@@ -11,6 +11,7 @@ import "flag"
 import "fmt"
 import "os"
 import "sync"
+import "sync/atomic"
 import "time"
 import "net/http"
 import _ "net/http/pprof"
@@ -106,15 +107,24 @@ func main() {
 	g := grid2d.New(200, 50, exit, cond)
 
 	var ch chan []grid2d.Update
-	ch = make(chan []grid2d.Update, 1)
+	ch = make(chan []grid2d.Update, 0)
 	g.Subscribe(ch, grid2d.Unbuffered)
 	cns := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
 	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
 
-	ch = make(chan []grid2d.Update, 1)
+	ch = make(chan []grid2d.Update, 0)
 	g.Subscribe(ch, grid2d.Unbuffered)
 	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs)
 
+	var numUpdates int64
+
+	ch = make(chan []grid2d.Update, 0)
+	g.Subscribe(ch, grid2d.Unbuffered)
+	go func() {
+		for updates := range ch {
+			atomic.AddInt64(&numUpdates, int64(len(updates)))
+		}
+	}()
 	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
 	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)
 	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)
@@ -135,6 +145,8 @@ func main() {
 					fmt.Print("[H")
 				}
 				term.PrintWorld(os.Stdout, g)
+				fmt.Println()
+				fmt.Printf("%d updates\n", atomic.LoadInt64(&numUpdates))
 				fmt.Printf("%d/%d orgs (%d/%d species)[J\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime())
 				if cond != nil {
 					cond.Broadcast()

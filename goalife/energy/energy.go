@@ -10,6 +10,18 @@ type Energetic interface {
 	AddEnergy(amt int) (int, int)
 }
 
+type nullEnergy struct{}
+
+func (_ nullEnergy) Energy() int {
+	return 0
+}
+
+func (_ nullEnergy) AddEnergy(_ int) (int, int) {
+	return 0, 0
+}
+
+var Null = nullEnergy{}
+
 // Battery is a simple implementation of Energetic that just stores a
 // count of available energy. Its value must never be set below zero.
 type Battery struct {
@@ -27,6 +39,12 @@ func (e *Battery) Energy() int {
 	defer e.mu.RUnlock()
 
 	return e.V
+}
+
+func (e *Battery) Reset(amt int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.V = amt
 }
 
 // AddEnergy adds the given amt to the battery. amt may be negative

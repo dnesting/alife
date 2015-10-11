@@ -8,6 +8,7 @@ type Locator interface {
 	Move(dx, dy int, fn PutWhenFunc) (interface{}, bool)
 	Replace(n interface{}) Locator
 	Remove()
+	RemoveWithPlaceholder(v interface{})
 	IsValid() bool
 	Value() interface{}
 }
@@ -122,12 +123,17 @@ func (l *locator) Replace(n interface{}) Locator {
 }
 
 func (l *locator) Remove() {
+	l.RemoveWithPlaceholder(l.v)
+}
+
+func (l *locator) RemoveWithPlaceholder(v interface{}) {
 	l.w.Lock()
 	if l.invalid {
 		return
 	}
 	l.checkLocationInvariant()
 	l.Replace(nil)
+	l.v = v
 	l.w.Unlock()
 	l.w.Wait()
 }
