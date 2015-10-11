@@ -155,7 +155,9 @@ func OpJump(o *org.Organism, c *Cpu) error {
 }
 
 func OpEat(o *org.Organism, c *Cpu) error {
-	o.Eat(c.R[0])
+	if _, err := o.Eat(c.R[0]); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -170,7 +172,9 @@ func OpRight(o *org.Organism, c *Cpu) error {
 }
 
 func OpForward(o *org.Organism, c *Cpu) error {
-	o.Forward()
+	if err := o.Forward(); err != nil && err != org.ErrNotEmpty {
+		return err
+	}
 	return nil
 }
 

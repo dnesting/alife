@@ -2,6 +2,7 @@ package term
 
 import "io"
 import "sort"
+import "sync"
 
 import "github.com/dnesting/alife/goalife/world/grid2d"
 
@@ -74,8 +75,11 @@ func (p byCoordinate) Less(i, j int) bool {
 }
 func (p byCoordinate) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
+var locPool = sync.Pool{New: func() interface{} { return make([]grid2d.Point, 0) }}
+
 func PrintWorld(w io.Writer, g grid2d.Grid) {
-	width, height, points := g.Locations()
+	points := locPool.Get().([]grid2d.Point)
+	width, height := g.Locations(&points)
 	sort.Sort(byCoordinate(points))
 
 	iy, ix := 0, -1
@@ -86,6 +90,7 @@ func PrintWorld(w io.Writer, g grid2d.Grid) {
 		writeRune(w, RuneForOccupant(p.V))
 		ix += 1
 	}
+	locPool.Put(points)
 	fillBefore(w, width, height-1, width, &ix, &iy)
 	writeRune(w, rightRune)
 	writeRune(w, '\n')

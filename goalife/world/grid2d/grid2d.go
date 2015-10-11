@@ -42,7 +42,7 @@ type Grid interface {
 	PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator)
 	Remove(x, y int) interface{}
 	All() []Locator
-	Locations() (int, int, []Point)
+	Locations(points *[]Point) (int, int)
 	Resize(width, height int, removedFn func(x, y int, o interface{}))
 	Wait()
 
@@ -189,16 +189,19 @@ func (g *grid) All() []Locator {
 	return locs
 }
 
-func (g *grid) Locations() (int, int, []Point) {
+func (g *grid) Locations(points *[]Point) (int, int) {
 	g.RLock()
 	defer g.RUnlock()
-	var points []Point
+	if cap(*points) < g.width*g.height {
+		*points = make([]Point, 0, g.width*g.height)
+	}
+	*points = (*points)[:0]
 	for _, l := range g.data {
 		if l != nil {
-			points = append(points, Point{l.x, l.y, l.v})
+			*points = append(*points, Point{l.x, l.y, l.v})
 		}
 	}
-	return g.width, g.height, points
+	return g.width, g.height
 }
 
 func (g *grid) Resize(width, height int, removedFn func(x, y int, o interface{})) {
@@ -229,11 +232,15 @@ type gobStruct struct {
 	Points []Point
 }
 
+var gobData gobStruct
+
 func (g *grid) GobEncode() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
-	width, height, locs := g.Locations()
-	if err := enc.Encode(gobStruct{width, height, locs}); err != nil {
+	width, height := g.Locations(&gobData.Points)
+	gobData.Width = width
+	gobData.Height = height
+	if err := enc.Encode(gobData); err != nil {
 		return nil, err
 	}
 	return b.Bytes(), nil

@@ -153,6 +153,7 @@ func (o *Organism) Sense(fn func(o interface{}) float64) float64 {
 
 func (o *Organism) Eat(amt int) (int, error) {
 	Logger.Printf("%v.Eat(%v)\n", o, amt)
+	amt = 100
 	if err := o.Discharge(amt / 100); err != nil {
 		return 0, err
 	}
