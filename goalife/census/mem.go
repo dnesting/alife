@@ -1,5 +1,6 @@
 package census
 
+import "fmt"
 import "sync"
 
 // MemCensus implements a Census entirely in-memory.
@@ -60,8 +61,9 @@ func (b *MemCensus) Remove(when interface{}, key Key) (ret Population) {
 			b.distinct -= 1
 			c.Last = when
 		}
+		return *c
 	}
-	return *c
+	panic(fmt.Sprintf("mismatched remove for %v", key))
 }
 
 // Count returns the number of things presently tracked in the world.

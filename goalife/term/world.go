@@ -2,7 +2,6 @@ package term
 
 import "io"
 import "sort"
-import "sync"
 import "time"
 
 import "github.com/dnesting/alife/goalife/world/grid2d"
@@ -101,7 +100,7 @@ func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn RuneFu
 	addFooter(w, width)
 }
 
-func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, tty bool, minFreq time.Duration, cond *sync.Cond) {
+func Printer(w io.Writer, g grid2d.Grid, runeFn func(interface{}) rune, tty bool, minFreq time.Duration, afterFn func()) {
 	var due time.Time
 	var timeCh <-chan time.Time
 	updateCh := make(chan []grid2d.Update, 0)
@@ -117,9 +116,9 @@ func Printer(w io.Writer, g grid2d.Grid, fn func(interface{}) rune, tty bool, mi
 		if tty {
 			io.WriteString(w, "[H")
 		}
-		printWorld(w, locs, width, height, fn)
-		if cond != nil {
-			cond.Broadcast()
+		printWorld(w, locs, width, height, runeFn)
+		if afterFn != nil {
+			afterFn()
 		}
 		locs = nil
 		timeCh = nil

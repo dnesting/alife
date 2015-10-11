@@ -8,6 +8,7 @@
 package main
 
 import "flag"
+import "fmt"
 import "os"
 import "sync"
 import "time"
@@ -105,12 +106,12 @@ func main() {
 	g := grid2d.New(200, 50, exit, cond)
 
 	var ch chan []grid2d.Update
-	ch = make(chan []grid2d.Update, 0)
+	ch = make(chan []grid2d.Update, 1)
 	g.Subscribe(ch)
 	cns := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
 	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
 
-	ch = make(chan []grid2d.Update, 0)
+	ch = make(chan []grid2d.Update, 1)
 	g.Subscribe(ch)
 	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs)
 
@@ -122,11 +123,18 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
+	afterPrint := func() {
+		fmt.Printf("%d/%d orgs (%d/%d species)\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime())
+		if cond != nil {
+			cond.Broadcast()
+		}
+	}
+
 	if printWorld {
 		dur := time.Duration(1000000.0/printRate) * time.Microsecond
 		wg.Add(1)
 		go func() {
-			term.Printer(os.Stdout, g, nil, !debug, dur, cond)
+			term.Printer(os.Stdout, g, nil, !debug, dur, afterPrint)
 			wg.Done()
 		}()
 	}
