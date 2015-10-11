@@ -2,7 +2,6 @@ package term
 
 import "io"
 import "sort"
-import "time"
 
 import "github.com/dnesting/alife/goalife/world/grid2d"
 
@@ -75,15 +74,8 @@ func (p byCoordinate) Less(i, j int) bool {
 }
 func (p byCoordinate) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
-func PrintWorld(w io.Writer, g grid2d.Grid, fn func(interface{}) rune) {
-	width, height, locs := g.Locations()
-	printWorld(w, locs, width, height, fn)
-}
-
-func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn RuneFunc) {
-	if fn == nil {
-		fn = DefaultRunes
-	}
+func PrintWorld(w io.Writer, g grid2d.Grid) {
+	width, height, points := g.Locations()
 	sort.Sort(byCoordinate(points))
 
 	iy, ix := 0, -1
@@ -91,30 +83,11 @@ func printWorld(w io.Writer, points []grid2d.Point, width, height int, fn RuneFu
 
 	for _, p := range points {
 		fillBefore(w, p.X, p.Y, width, &ix, &iy)
-		writeRune(w, fn(p.V))
+		writeRune(w, RuneForOccupant(p.V))
 		ix += 1
 	}
 	fillBefore(w, width, height-1, width, &ix, &iy)
 	writeRune(w, rightRune)
 	writeRune(w, '\n')
 	addFooter(w, width)
-}
-
-func Printer(w io.Writer, g grid2d.Grid, runeFn func(interface{}) rune, tty bool, minFreq time.Duration, afterFn func()) {
-	updateCh := make(chan []grid2d.Update, 0)
-	g.Subscribe(updateCh)
-	defer g.Unsubscribe(updateCh)
-
-	queue := grid2d.NotifyAsQueue(grid2d.RateLimited(updateCh, minFreq, 0))
-
-	for queue.Next() != nil {
-		width, height, locs := g.Locations()
-		if tty {
-			io.WriteString(w, "[H")
-		}
-		printWorld(w, locs, width, height, runeFn)
-		if afterFn != nil {
-			afterFn()
-		}
-	}
 }

@@ -26,6 +26,15 @@ type Point struct {
 	V    interface{}
 }
 
+type NotifyStyle int
+
+const (
+	BufferFirst NotifyStyle = 1 << iota
+	BufferLast
+	BufferAll
+	Unbuffered
+)
+
 type Grid interface {
 	Extents() (int, int)
 	Get(x, y int) Locator
@@ -37,7 +46,7 @@ type Grid interface {
 	Resize(width, height int, removedFn func(x, y int, o interface{}))
 	Wait()
 
-	Subscribe(ch chan<- []Update)
+	Subscribe(ch chan<- []Update, style NotifyStyle)
 	Unsubscribe(ch chan<- []Update)
 }
 

@@ -4,11 +4,7 @@ import "github.com/dnesting/alife/goalife/energy"
 import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/driver/cpu1"
 
-type RuneFunc func(o interface{}) rune
-
-var DefaultRunes RuneFunc = defaultFn
-
-func defaultFn(o interface{}) rune {
+func RuneForOccupant(o interface{}) rune {
 	switch o := o.(type) {
 	case *energy.Food:
 		return RuneForFood(o, 5000)

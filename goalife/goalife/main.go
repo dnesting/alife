@@ -87,8 +87,8 @@ func main() {
 		Logger = l
 		//cpu1.Logger = l
 		//org.Logger = l
-		grid2d.Logger = l
-		//maintain.Logger = l
+		//grid2d.Logger = l
+		maintain.Logger = l
 	}
 	if pprof {
 		go func() {
@@ -107,12 +107,12 @@ func main() {
 
 	var ch chan []grid2d.Update
 	ch = make(chan []grid2d.Update, 1)
-	g.Subscribe(ch)
+	g.Subscribe(ch, grid2d.Unbuffered)
 	cns := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
 	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
 
 	ch = make(chan []grid2d.Update, 1)
-	g.Subscribe(ch)
+	g.Subscribe(ch, grid2d.Unbuffered)
 	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs)
 
 	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
@@ -123,19 +123,23 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	afterPrint := func() {
-		fmt.Printf("%d/%d orgs (%d/%d species)\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime())
-		if cond != nil {
-			cond.Broadcast()
-		}
-	}
-
 	if printWorld {
-		dur := time.Duration(1000000.0/printRate) * time.Microsecond
-		wg.Add(1)
+		freq := time.Duration(1000000.0/printRate) * time.Microsecond
+		ch = make(chan []grid2d.Update, 0)
+		g.Subscribe(ch, grid2d.BufferLast)
+		ch := grid2d.RateLimited(ch, freq, 0)
+
 		go func() {
-			term.Printer(os.Stdout, g, nil, !debug, dur, afterPrint)
-			wg.Done()
+			for _ = range ch {
+				if !debug {
+					fmt.Print("[H")
+				}
+				term.PrintWorld(os.Stdout, g)
+				fmt.Printf("%d/%d orgs (%d/%d species)[J\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime())
+				if cond != nil {
+					cond.Broadcast()
+				}
+			}
 		}()
 	}
 

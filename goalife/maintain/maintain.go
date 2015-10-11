@@ -7,9 +7,11 @@ var Logger = log.Null()
 
 func Maintain(ch <-chan []grid2d.Update, counterFn func(o interface{}) bool, fn func(), keep int) {
 	Logger.Printf("seeding initial %d items\n", keep)
-	for i := 0; i < keep; i++ {
-		fn()
-	}
+	go func() {
+		for i := 0; i < keep; i++ {
+			fn()
+		}
+	}()
 
 	var count int
 	for updates := range ch {
@@ -25,7 +27,7 @@ func Maintain(ch <-chan []grid2d.Update, counterFn func(o interface{}) bool, fn 
 					count--
 					if count < keep {
 						Logger.Printf("%v removed, count %d, adding one\n", u.Old.V, count)
-						fn()
+						go fn()
 					} else {
 						Logger.Printf("%v removed, count %d\n", u.Old.V, count)
 					}
