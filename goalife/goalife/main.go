@@ -10,6 +10,7 @@ package main
 import "flag"
 import "fmt"
 import "os"
+import "runtime"
 import "sync"
 import "sync/atomic"
 import "time"
@@ -92,6 +93,7 @@ func main() {
 		maintain.Logger = l
 	}
 	if pprof {
+		runtime.SetBlockProfileRate(1000)
 		go func() {
 			Logger.Println(http.ListenAndServe("0.0.0.0:6060", nil))
 		}()
