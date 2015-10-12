@@ -10,6 +10,7 @@ package main
 import "flag"
 import "fmt"
 import "os"
+import "math/rand"
 import "runtime"
 import "sync"
 import "sync/atomic"
@@ -49,12 +50,13 @@ func init() {
 
 func startOrg(g grid2d.Grid) {
 	c := cpu1.Random()
-	o := &org.Organism{Driver: c}
+	o := org.Random()
+	o.Driver = c
 	o.AddEnergy(1000)
 	for {
 		if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
 			go func() {
-				g.Wait()
+				//g.Wait()
 				c.Run(o)
 				//if err := c.Run(o); err != nil {
 				//	Logger.Printf("org exited: %v\n", err)
@@ -81,14 +83,15 @@ func orgHash(o interface{}) *census.Key {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	flag.Parse()
 	if debug {
 		l := log.Real()
 		Logger = l
 		//cpu1.Logger = l
-		//org.Logger = l
+		org.Logger = l
 		//grid2d.Logger = l
-		maintain.Logger = l
+		//maintain.Logger = l
 	}
 	if pprof {
 		runtime.SetBlockProfileRate(1000)
@@ -140,6 +143,7 @@ func main() {
 		ch := grid2d.RateLimited(ch, freq, 0)
 
 		go func() {
+			runtime.LockOSThread()
 			for _ = range ch {
 				if !debug {
 					fmt.Print("[H")

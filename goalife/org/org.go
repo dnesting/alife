@@ -161,17 +161,23 @@ func (o *Organism) Sense(fn func(o interface{}) float64) float64 {
 
 func (o *Organism) Eat(amt int) (int, error) {
 	Logger.Printf("%v.Eat(%v)\n", o, amt)
-	amt = 100
 	if err := o.Discharge(amt / 100); err != nil {
 		return 0, err
 	}
 	if n := o.loc.Get(o.delta(1)); n != nil {
-		if n, ok := n.(energy.Energetic); ok {
+		Logger.Printf("- got %v\n", n.Value())
+		if n, ok := n.Value().(energy.Energetic); ok {
+			Logger.Printf("- is energetic\n")
 			amt, _ := n.AddEnergy(-amt)
+			Logger.Printf("- transferred %v\n", amt)
 			o.AddEnergy(-amt)
 			runtime.Gosched()
 			return -amt, nil
+		} else {
+			Logger.Printf("- not energetic\n")
 		}
+	} else {
+		Logger.Printf("- empty\n")
 	}
 	return 0, nil
 }

@@ -105,6 +105,15 @@ func (l *locator) Move(dx, dy int, fn PutWhenFunc) (interface{}, bool) {
 
 func (l *locator) Replace(n interface{}) Locator {
 	l.w.Lock()
+	loc := l.replaceLocked(n)
+	l.w.Unlock()
+	if loc != nil {
+		l.w.Wait()
+	}
+	return loc
+}
+
+func (l *locator) replaceLocked(n interface{}) Locator {
 	l.checkValid()
 	l.checkLocationInvariant()
 	old := l.v
@@ -114,11 +123,8 @@ func (l *locator) Replace(n interface{}) Locator {
 		} else {
 			l.w.RecordReplace(l.x, l.y, old, n)
 		}
-		l.w.Unlock()
-		l.w.Wait()
 		return loc
 	}
-	l.w.Unlock()
 	return nil
 }
 
@@ -129,10 +135,11 @@ func (l *locator) Remove() {
 func (l *locator) RemoveWithPlaceholder(v interface{}) {
 	l.w.Lock()
 	if l.invalid {
+		l.w.Unlock()
 		return
 	}
 	l.checkLocationInvariant()
-	l.Replace(nil)
+	l.replaceLocked(nil)
 	l.v = v
 	l.w.Unlock()
 	l.w.Wait()
