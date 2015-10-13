@@ -134,8 +134,7 @@ func (o *Organism) Divide(driver interface{}, energyFrac float64) (*Organism, er
 	n.Driver = driver
 	dx, dy := o.delta(1)
 	if _, loc := o.loc.Put(dx, dy, n, PutWhenFood); loc != nil {
-		amt, _ := o.AddEnergy(-int(float64(o.Energy()) * energyFrac))
-		n.AddEnergy(-amt)
+		energy.Transfer(n, o, int(float64(o.Energy())*energyFrac))
 		runtime.Gosched()
 		return n, nil
 	}
@@ -168,9 +167,8 @@ func (o *Organism) Eat(amt int) (int, error) {
 		Logger.Printf("- got %v\n", n.Value())
 		if n, ok := n.Value().(energy.Energetic); ok {
 			Logger.Printf("- is energetic\n")
-			amt, _ := n.AddEnergy(-amt)
+			amt, _, _ = energy.Transfer(o, n, amt)
 			Logger.Printf("- transferred %v\n", amt)
-			o.AddEnergy(-amt)
 			runtime.Gosched()
 			return -amt, nil
 		} else {

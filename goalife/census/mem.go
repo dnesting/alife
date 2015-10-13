@@ -6,7 +6,7 @@ import "sync"
 // MemCensus implements a Census entirely in-memory.
 type MemCensus struct {
 	mu          sync.RWMutex
-	seen        map[Key]*Population
+	seen        map[uint64]*Population
 	count       int
 	countAll    int
 	distinct    int
@@ -16,7 +16,7 @@ type MemCensus struct {
 func (b *MemCensus) Get(key Key) (Population, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	c, ok := b.seen[key]
+	c, ok := b.seen[key.Hash()]
 	if ok {
 		return *c, true
 	}
@@ -28,16 +28,17 @@ func (b *MemCensus) Add(when interface{}, key Key) (ret Population) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.seen == nil {
-		b.seen = make(map[Key]*Population)
+		b.seen = make(map[uint64]*Population)
 	}
 
-	c, ok := b.seen[key]
+	h := key.Hash()
+	c, ok := b.seen[h]
 	if !ok {
 		c = &Population{
 			Key:   key,
 			First: when,
 		}
-		b.seen[key] = c
+		b.seen[h] = c
 		b.distinct += 1
 		b.distinctAll += 1
 	}
@@ -52,12 +53,13 @@ func (b *MemCensus) Remove(when interface{}, key Key) (ret Population) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	c, ok := b.seen[key]
+	h := key.Hash()
+	c, ok := b.seen[h]
 	if ok {
 		c.Count -= 1
 		b.count -= 1
 		if c.Count == 0 {
-			delete(b.seen, key)
+			delete(b.seen, h)
 			b.distinct -= 1
 			c.Last = when
 		}

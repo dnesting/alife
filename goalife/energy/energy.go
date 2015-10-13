@@ -59,3 +59,16 @@ func (e *Battery) AddEnergy(amt int) (adj int, newLevel int) {
 		}
 	}
 }
+
+// Transfer moves at most amt units of energy from src to dest. Neither
+// entity's energy will drop below zero. Returns the actual amount
+// transferred, and the remaining energy in dest and src.
+func Transfer(dest, src Energetic, amt int) (actual int, destE int, srcE int) {
+	if amt < 0 {
+		dest, src = src, dest
+		amt = -amt
+	}
+	actual, srcE = src.AddEnergy(-amt)
+	_, destE = dest.AddEnergy(-actual)
+	return -actual, destE, srcE
+}
