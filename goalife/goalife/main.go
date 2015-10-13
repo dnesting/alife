@@ -150,8 +150,11 @@ func main() {
 				}
 				term.PrintWorld(os.Stdout, g)
 				fmt.Println()
+				if !debug {
+					fmt.Print("[J")
+				}
 				fmt.Printf("%d updates\n", atomic.LoadInt64(&numUpdates))
-				fmt.Printf("%d/%d orgs (%d/%d species)[J\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime())
+				fmt.Printf("%d/%d orgs (%d/%d species, %d recorded)\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime(), cns.NumRecorded())
 				if cond != nil {
 					cond.Broadcast()
 				}
