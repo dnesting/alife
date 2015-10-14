@@ -10,15 +10,17 @@ import "os"
 import "path"
 
 var deps = struct {
-	ReadDir func(string) ([]os.FileInfo, error)
-	Stat    func(string) (os.FileInfo, error)
-	Create  func(string) (io.ReadWriteCloser, error)
-	Open    func(string) (io.ReadWriteCloser, error)
+	ReadDir  func(string) ([]os.FileInfo, error)
+	Stat     func(string) (os.FileInfo, error)
+	Create   func(string) (io.ReadWriteCloser, error)
+	Open     func(string) (io.ReadWriteCloser, error)
+	MkdirAll func(string, os.FileMode) error
 }{
 	ioutil.ReadDir,
 	os.Stat,
 	func(s string) (io.ReadWriteCloser, error) { return os.Create(s) },
 	func(s string) (io.ReadWriteCloser, error) { return os.Open(s) },
+	os.MkdirAll,
 }
 
 // DirCensus implements a Census that saves interesting populations to disk.
@@ -30,14 +32,17 @@ type DirCensus struct {
 	numRecorded int // the number of populations written to disk
 }
 
-func NewDirCensus(dir string, threshold func(p Population) bool) *DirCensus {
+func NewDirCensus(dir string, threshold func(p Population) bool) (*DirCensus, error) {
 	b := &DirCensus{
 		Dir:       dir,
 		Threshold: threshold,
 	}
+	if err := deps.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
 	ls, _ := deps.ReadDir(b.Dir)
 	b.numRecorded = len(ls)
-	return b
+	return b, nil
 }
 
 func (b *DirCensus) filename(key Key) string {

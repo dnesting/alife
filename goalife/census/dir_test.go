@@ -8,12 +8,6 @@ import "path"
 import "testing"
 import "time"
 
-type fakeKey uint64
-
-func (f fakeKey) Hash() uint64 {
-	return uint64(f)
-}
-
 type closeBuffer struct {
 	bytes.Buffer
 	Closed bool
@@ -63,8 +57,12 @@ func TestNew(t *testing.T) {
 		}
 		return []os.FileInfo{fi{"a"}, fi{"b"}, fi{"c"}}, nil
 	}
+	deps.MkdirAll = func(_ string, _ os.FileMode) error { return nil }
 
-	d := NewDirCensus(dir, nil)
+	d, err := NewDirCensus(dir, nil)
+	if err != nil {
+		t.Errorf("unexpected error creating dir census: %v", err)
+	}
 	if d.NumRecorded() != 3 {
 		t.Errorf("NumRecorded() expected %d, got %d", 3, d.NumRecorded())
 	}
@@ -137,6 +135,7 @@ func TestIsRecorded(t *testing.T) {
 func TestRecord(t *testing.T) {
 	dir := "/path/foo"
 	key := fakeKey(0x100)
+	key.Other = 42
 	file := path.Join(dir, "100")
 	pop := Population{Key: key, Count: 10}
 	b := &closeBuffer{}
@@ -157,6 +156,13 @@ func TestRecord(t *testing.T) {
 	p := decoded(t, b)
 	if p.Count != 10 {
 		t.Errorf("Count should be 10, got %v", p.Count)
+	}
+	if fk, ok := p.Key.(fakeKeyType); ok {
+		if fk.Other != 42 {
+			t.Errorf("key fields did not survive encoding, expected other=42, got %+v", fk)
+		}
+	} else {
+		t.Errorf("key type did not survive encoding, expected fakeKeyType, got %+v", p.Key)
 	}
 }
 

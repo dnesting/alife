@@ -112,7 +112,11 @@ func main() {
 	var ch chan []grid2d.Update
 	ch = make(chan []grid2d.Update, 0)
 	g.Subscribe(ch, grid2d.Unbuffered)
-	cns := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
+	cns, err := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
+	if err != nil {
+		fmt.Printf("Error creating census: %v\n", err)
+		os.Exit(1)
+	}
 	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
 
 	ch = make(chan []grid2d.Update, 0)
