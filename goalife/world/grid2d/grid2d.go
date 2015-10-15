@@ -240,7 +240,9 @@ func (g *grid) Resize(width, height int, removedFn func(x, y int, o interface{})
 	for _, l := range old {
 		if l != nil {
 			if l.x >= width || l.y >= height {
-				removedFn(l.x, l.y, l.v)
+				if removedFn != nil {
+					removedFn(l.x, l.y, l.v)
+				}
 				g.RecordRemove(l.x, l.y, l.v)
 			} else {
 				g.data[g.offset(l.x, l.y)] = l

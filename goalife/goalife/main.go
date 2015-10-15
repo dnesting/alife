@@ -7,6 +7,7 @@
 
 package main
 
+import "encoding/gob"
 import "flag"
 import "fmt"
 import "os"
@@ -18,10 +19,10 @@ import "time"
 import "net/http"
 import _ "net/http/pprof"
 
+import "github.com/dnesting/alife/goalife/autosave"
 import "github.com/dnesting/alife/goalife/census"
 import "github.com/dnesting/alife/goalife/driver/cpu1"
 import "github.com/dnesting/alife/goalife/energy"
-
 import "github.com/dnesting/alife/goalife/maintain"
 import "github.com/dnesting/alife/goalife/log"
 import "github.com/dnesting/alife/goalife/org"
@@ -31,12 +32,15 @@ import "github.com/dnesting/alife/goalife/world/grid2d"
 var Logger = log.Null()
 
 var (
-	debug        bool
-	printWorld   bool
-	printRate    float64
-	pprof        bool
-	minOrgs      int
-	syncToRender bool
+	debug         bool
+	printWorld    bool
+	printRate     float64
+	pprof         bool
+	minOrgs       int
+	syncToRender  bool
+	saveFile      string
+	saveEvery     int
+	width, height int
 )
 
 func init() {
@@ -46,6 +50,10 @@ func init() {
 	flag.BoolVar(&pprof, "pprof", false, "enable profiling")
 	flag.IntVar(&minOrgs, "min", 50, "maintain this many organisms at a minimum")
 	flag.BoolVar(&syncToRender, "sync", false, "sync world updates to rendering")
+	flag.StringVar(&saveFile, "save_file", "/tmp/autosave.dat", "auto-save to this filename")
+	flag.IntVar(&saveEvery, "save_every_secs", 3, "auto-save every save_every_secs secs")
+	flag.IntVar(&width, "width", 200, "width of world")
+	flag.IntVar(&height, "height", 50, "height of world")
 }
 
 func startOrg(g grid2d.Grid) {
@@ -63,6 +71,18 @@ func startOrg(g grid2d.Grid) {
 				//}
 			}()
 			break
+		}
+	}
+}
+
+func startAll(g grid2d.Grid) {
+	var locs []grid2d.Point
+	g.Locations(&locs)
+	for _, p := range locs {
+		if o, ok := p.V.(*org.Organism); ok {
+			if c, ok := o.Driver.(*cpu1.Cpu); ok {
+				go c.Run(o)
+			}
 		}
 	}
 }
@@ -107,7 +127,18 @@ func main() {
 		cond = sync.NewCond(&sync.Mutex{})
 	}
 
-	g := grid2d.New(200, 50, exit, cond)
+	census.RegisterGobTypes()
+	gob.Register(&org.Organism{})
+
+	g := grid2d.New(0, 0, exit, cond)
+
+	if saveFile != "" {
+		if err := autosave.Restore(saveFile, g); err != nil && !os.IsNotExist(err) {
+			fmt.Printf("error restoring from %s: %v\n", saveFile, err)
+			os.Exit(1)
+		}
+	}
+	g.Resize(width, height, nil)
 
 	var ch chan []grid2d.Update
 	ch = make(chan []grid2d.Update, 0)
@@ -117,11 +148,14 @@ func main() {
 		fmt.Printf("Error creating census: %v\n", err)
 		os.Exit(1)
 	}
-	go census.WatchWorld(cns, ch, func() interface{} { return time.Now() }, orgHash)
+	go census.WatchWorld(cns, g, ch, func() interface{} { return time.Now() }, orgHash)
+
+	startAll(g)
 
 	ch = make(chan []grid2d.Update, 0)
+	mCount := maintain.Count(g, isOrg)
 	g.Subscribe(ch, grid2d.Unbuffered)
-	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs)
+	go maintain.Maintain(g, ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
 
 	var numUpdates int64
 
@@ -132,6 +166,17 @@ func main() {
 			atomic.AddInt64(&numUpdates, int64(len(updates)))
 		}
 	}()
+
+	if saveFile != "" && saveEvery != 0 {
+		go func() {
+			err := autosave.Loop(saveFile, g, time.Duration(saveEvery)*time.Second, exit)
+			if err != nil {
+				fmt.Printf("autosave: %v\n", err)
+				os.Exit(1)
+			}
+		}()
+	}
+
 	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
 	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)
 	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)

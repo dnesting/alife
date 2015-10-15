@@ -13,8 +13,20 @@ func RegisterGobTypes() {
 	gob.Register(time.Time{})
 }
 
-func WatchWorld(c Census, ch <-chan []grid2d.Update, timeFn func() interface{}, keyFn func(interface{}) *Key) {
+func ScanWorld(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn func(interface{}) *Key) {
+	var locs []grid2d.Point
+	g.Locations(&locs)
+
+	for _, p := range locs {
+		if key := keyFn(p.V); key != nil {
+			c.Add(timeFn(), *key)
+		}
+	}
+}
+
+func WatchWorld(c Census, g grid2d.Grid, ch <-chan []grid2d.Update, timeFn func() interface{}, keyFn func(interface{}) *Key) {
 	RegisterGobTypes()
+	ScanWorld(c, g, timeFn, keyFn)
 
 	for updates := range ch {
 		if updates == nil {
