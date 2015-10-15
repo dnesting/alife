@@ -27,7 +27,7 @@ func (c *Cpu) Copy() *Cpu {
 
 func (c *Cpu) Mutate() {
 	Logger.Printf("%v.Mutate()", c)
-	c.Code.Mutate(opTable)
+	c.Code.Mutate(Ops)
 }
 
 func (c *Cpu) Hash() uint64 {
@@ -36,7 +36,7 @@ func (c *Cpu) Hash() uint64 {
 
 func Random() *Cpu {
 	return &Cpu{
-		Code: RandomBytecode(opTable),
+		Code: RandomBytecode(Ops),
 	}
 }
 
@@ -80,8 +80,8 @@ func (c *Cpu) readOp() (*Op, int) {
 		return nil, c.Ip + 1
 	}
 	b := c.Code[c.Ip]
-	if b < 0 || b > byte(len(opTable)) {
+	if b < 0 || b > byte(len(Ops)) {
 		return nil, c.Ip + 1
 	}
-	return &opTable[b], c.Ip + 1
+	return &Ops[b], c.Ip + 1
 }

@@ -9,10 +9,10 @@ const MutationRate = 0.01
 
 var ErrDivisionByZero = errors.New("division by zero")
 
-var opTable OpTable
+var Ops OpTable
 
 func init() {
-	opTable = OpTable([]Op{
+	Ops = OpTable([]Op{
 		// 0
 		Op{"XXX", OpNoop, 1},
 		Op{"L1", OpNoop, 1},

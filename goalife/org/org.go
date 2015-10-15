@@ -22,7 +22,7 @@ type Organism struct {
 	loc    grid2d.Locator
 	Driver interface{}
 
-	sync.Mutex
+	mu  sync.Mutex
 	Dir int
 }
 
@@ -36,22 +36,22 @@ func (o *Organism) UseLocator(loc grid2d.Locator) {
 
 func (o *Organism) Left() {
 	Logger.Printf("%v.Left()\n", o)
-	o.Lock()
+	o.mu.Lock()
 
 	o.Dir -= 1
 	if o.Dir < 0 {
 		o.Dir = 7
 	}
 
-	o.Unlock()
+	o.mu.Unlock()
 	runtime.Gosched()
 }
 
 func (o *Organism) Right() {
 	Logger.Printf("%v.Right()\n", o)
-	o.Lock()
+	o.mu.Lock()
 	o.Dir = (o.Dir + 1) % 8
-	o.Unlock()
+	o.mu.Unlock()
 	runtime.Gosched()
 }
 
