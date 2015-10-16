@@ -3,7 +3,7 @@ package cpu1
 import "bytes"
 import "fmt"
 
-import "github.com/dnesting/alife/goalife/org"
+import "github.com/dnesting/alife/goalife/grid2d/org"
 
 // Op represents a single named instruction.
 type Op struct {

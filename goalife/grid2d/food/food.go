@@ -1,13 +1,16 @@
-package energy
+package food
 
 import "fmt"
 import "sync"
 
-import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/energy"
+import "github.com/dnesting/alife/goalife/grid2d"
 
 // Food is a type of battery that, when its energy drops to zero, its OnEmpty func is called.
 type Food struct {
-	Battery
+	energy.Battery
+
+	mu  sync.Mutex
 	loc grid2d.Locator
 }
 
@@ -18,17 +21,25 @@ func (f *Food) String() string {
 }
 
 // NewFood creates a new Food instance with the given energy level.
-func NewFood(amt int) *Food {
+func New(amt int) *Food {
 	f := foodPool.Get().(*Food)
 	f.Reset(amt)
 	return f
 }
 
+func (f *Food) invalidate() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.loc != nil {
+		f.loc.RemoveWithPlaceholder(energy.Null)
+		f.loc = nil
+	}
+}
+
 func (f *Food) AddEnergy(amt int) (adj int, newLevel int) {
 	adj, newLevel = f.Battery.AddEnergy(amt)
-	if adj != 0 && newLevel == 0 && f.loc != nil {
-		f.loc.RemoveWithPlaceholder(Null)
-		f.loc = nil
+	if adj != 0 && newLevel == 0 {
+		f.invalidate()
 		foodPool.Put(f)
 	}
 	return adj, newLevel

@@ -3,7 +3,7 @@ package cpu1
 import "errors"
 import "math/rand"
 
-import "github.com/dnesting/alife/goalife/org"
+import "github.com/dnesting/alife/goalife/grid2d/org"
 
 const MutationRate = 0.01
 

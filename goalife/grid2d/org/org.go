@@ -8,7 +8,8 @@ import "sync"
 import "runtime"
 
 import "github.com/dnesting/alife/goalife/energy"
-import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d/food"
 import "github.com/dnesting/alife/goalife/log"
 
 const BodyEnergy = 100
@@ -67,7 +68,7 @@ func (o *Organism) Discharge(amt int) error {
 
 func (o *Organism) Die() {
 	Logger.Printf("%v.Die()\n", o)
-	o.loc.Replace(energy.NewFood(o.Energy() + BodyEnergy))
+	o.loc.Replace(food.New(o.Energy() + BodyEnergy))
 	runtime.Gosched()
 }
 
@@ -118,7 +119,7 @@ var PutWhenFood = func(orig, n interface{}) bool {
 	if orig == nil {
 		return true
 	}
-	if _, ok := orig.(*energy.Food); ok {
+	if _, ok := orig.(*food.Food); ok {
 		return true
 	}
 	return false

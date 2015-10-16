@@ -3,13 +3,13 @@ package census
 import "encoding/gob"
 import "time"
 
-import "github.com/dnesting/alife/goalife/world/grid2d"
-import "github.com/dnesting/alife/goalife/energy"
-import "github.com/dnesting/alife/goalife/driver/cpu1"
+import "github.com/dnesting/alife/goalife/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d/food"
+import "github.com/dnesting/alife/goalife/grid2d/org/driver/cpu1"
 
 func RegisterGobTypes() {
 	gob.Register(&cpu1.Cpu{})
-	gob.Register(&energy.Food{})
+	gob.Register(&food.Food{})
 	gob.Register(time.Time{})
 }
 

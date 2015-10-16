@@ -1,12 +1,12 @@
 package term
 
-import "github.com/dnesting/alife/goalife/energy"
-import "github.com/dnesting/alife/goalife/org"
-import "github.com/dnesting/alife/goalife/driver/cpu1"
+import "github.com/dnesting/alife/goalife/grid2d/food"
+import "github.com/dnesting/alife/goalife/grid2d/org"
+import "github.com/dnesting/alife/goalife/grid2d/org/driver/cpu1"
 
 func RuneForOccupant(o interface{}) rune {
 	switch o := o.(type) {
-	case *energy.Food:
+	case *food.Food:
 		return RuneForFood(o, 5000)
 	case *org.Organism:
 		return RuneForOrganism(o)
@@ -15,7 +15,7 @@ func RuneForOccupant(o interface{}) rune {
 	}
 }
 
-func RuneForFood(f *energy.Food, energyRange int) rune {
+func RuneForFood(f *food.Food, energyRange int) rune {
 	e := f.Energy()
 	switch {
 	case e > energyRange/5*4:

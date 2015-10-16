@@ -6,7 +6,7 @@ import "os"
 import "path"
 import "time"
 
-import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d"
 
 func Save(filename string, g grid2d.Grid) error {
 	dir := path.Dir(filename)

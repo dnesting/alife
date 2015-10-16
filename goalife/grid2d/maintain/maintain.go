@@ -1,6 +1,6 @@
 package maintain
 
-import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d"
 import "github.com/dnesting/alife/goalife/log"
 
 var Logger = log.Null()

@@ -19,15 +19,15 @@ import "time"
 import "net/http"
 import _ "net/http/pprof"
 
-import "github.com/dnesting/alife/goalife/autosave"
 import "github.com/dnesting/alife/goalife/census"
-import "github.com/dnesting/alife/goalife/driver/cpu1"
-import "github.com/dnesting/alife/goalife/energy"
-import "github.com/dnesting/alife/goalife/maintain"
+import "github.com/dnesting/alife/goalife/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d/autosave"
+import "github.com/dnesting/alife/goalife/grid2d/food"
+import "github.com/dnesting/alife/goalife/grid2d/maintain"
+import "github.com/dnesting/alife/goalife/grid2d/org"
+import "github.com/dnesting/alife/goalife/grid2d/org/driver/cpu1"
 import "github.com/dnesting/alife/goalife/log"
-import "github.com/dnesting/alife/goalife/org"
 import "github.com/dnesting/alife/goalife/term"
-import "github.com/dnesting/alife/goalife/world/grid2d"
 
 var Logger = log.Null()
 
@@ -177,10 +177,10 @@ func main() {
 		}()
 	}
 
-	g.Put(10, 10, energy.NewFood(10), grid2d.PutAlways)
-	g.Put(11, 11, energy.NewFood(2000), grid2d.PutAlways)
-	g.Put(12, 12, energy.NewFood(3000), grid2d.PutAlways)
-	g.Put(13, 13, energy.NewFood(8000), grid2d.PutAlways)
+	g.Put(10, 10, food.New(10), grid2d.PutAlways)
+	g.Put(11, 11, food.New(2000), grid2d.PutAlways)
+	g.Put(12, 12, food.New(3000), grid2d.PutAlways)
+	g.Put(13, 13, food.New(8000), grid2d.PutAlways)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

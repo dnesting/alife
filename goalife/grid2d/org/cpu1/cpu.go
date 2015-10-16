@@ -3,7 +3,7 @@ package cpu1
 import "errors"
 import "fmt"
 
-import "github.com/dnesting/alife/goalife/org"
+import "github.com/dnesting/alife/goalife/grid2d/org"
 import "github.com/dnesting/alife/goalife/log"
 
 var Logger = log.Null()

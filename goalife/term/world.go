@@ -4,7 +4,7 @@ import "io"
 import "sort"
 import "sync"
 
-import "github.com/dnesting/alife/goalife/world/grid2d"
+import "github.com/dnesting/alife/goalife/grid2d"
 
 const (
 	topLeftRune     = '┌'
