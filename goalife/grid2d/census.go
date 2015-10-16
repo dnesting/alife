@@ -4,16 +4,14 @@ import "encoding/gob"
 import "time"
 
 import "github.com/dnesting/alife/goalife/grid2d"
-import "github.com/dnesting/alife/goalife/grid2d/food"
-import "github.com/dnesting/alife/goalife/grid2d/org/driver/cpu1"
 
 func RegisterGobTypes() {
+	gob.Register(time.Time{})
 	gob.Register(&cpu1.Cpu{})
 	gob.Register(&food.Food{})
-	gob.Register(time.Time{})
 }
 
-func ScanWorld(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn func(interface{}) *Key) {
+func ScanForCensus(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn func(interface{}) *Key) {
 	var locs []grid2d.Point
 	g.Locations(&locs)
 
@@ -24,7 +22,7 @@ func ScanWorld(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn func(in
 	}
 }
 
-func WatchWorld(c Census, g grid2d.Grid, ch <-chan []grid2d.Update, timeFn func() interface{}, keyFn func(interface{}) *Key) {
+func WatchForCensus(c Census, g grid2d.Grid, ch <-chan []grid2d.Update, timeFn func() interface{}, keyFn func(interface{}) *Key) {
 	RegisterGobTypes()
 	ScanWorld(c, g, timeFn, keyFn)
 
