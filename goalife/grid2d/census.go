@@ -1,18 +1,9 @@
-package census
+package grid2d
 
-import "encoding/gob"
-import "time"
+import "github.com/dnesting/alife/goalife/census"
 
-import "github.com/dnesting/alife/goalife/grid2d"
-
-func RegisterGobTypes() {
-	gob.Register(time.Time{})
-	gob.Register(&cpu1.Cpu{})
-	gob.Register(&food.Food{})
-}
-
-func ScanForCensus(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn func(interface{}) *Key) {
-	var locs []grid2d.Point
+func ScanForCensus(c census.Census, g Grid, timeFn func() interface{}, keyFn func(interface{}) *census.Key) {
+	var locs []Point
 	g.Locations(&locs)
 
 	for _, p := range locs {
@@ -22,10 +13,7 @@ func ScanForCensus(c Census, g grid2d.Grid, timeFn func() interface{}, keyFn fun
 	}
 }
 
-func WatchForCensus(c Census, g grid2d.Grid, ch <-chan []grid2d.Update, timeFn func() interface{}, keyFn func(interface{}) *Key) {
-	RegisterGobTypes()
-	ScanWorld(c, g, timeFn, keyFn)
-
+func WatchForCensus(c census.Census, g Grid, ch <-chan []Update, timeFn func() interface{}, keyFn func(interface{}) *census.Key) {
 	for updates := range ch {
 		if updates == nil {
 			return

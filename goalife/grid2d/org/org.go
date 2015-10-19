@@ -12,7 +12,7 @@ import "github.com/dnesting/alife/goalife/grid2d"
 import "github.com/dnesting/alife/goalife/grid2d/food"
 import "github.com/dnesting/alife/goalife/log"
 
-const BodyEnergy = 100
+const BodyEnergy = 1000
 const SenseFalloffExp = 2
 const SenseDistance = 10
 

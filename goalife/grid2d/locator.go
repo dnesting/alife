@@ -1,6 +1,8 @@
 package grid2d
 
 import "fmt"
+import "os"
+import "runtime"
 
 type Locator interface {
 	Get(dx, dy int) Locator
@@ -18,10 +20,21 @@ type UsesLocator interface {
 }
 
 type locator struct {
-	w       *grid
-	x, y    int
-	v       interface{}
-	invalid bool
+	w        *grid
+	x, y     int
+	v        interface{}
+	invalid  bool
+	invStack []byte
+}
+
+func newLocator(w *grid, x, y int, v interface{}) *locator {
+	return &locator{
+		w:        w,
+		x:        x,
+		y:        y,
+		v:        v,
+		invStack: make([]byte, 8192),
+	}
 }
 
 func (l *locator) String() string {
@@ -34,6 +47,9 @@ func (l *locator) String() string {
 
 func (l *locator) checkValid() {
 	if l.invalid {
+		fmt.Fprintf(os.Stderr, "invalidated at:\n")
+		os.Stderr.Write(l.invStack)
+		fmt.Fprintln(os.Stderr)
 		panic("attempt to use an invalidated locator")
 	}
 }
@@ -150,6 +166,7 @@ func (l *locator) invalidate() {
 		return
 	}
 	l.invalid = true
+	runtime.Stack(l.invStack, false)
 }
 
 func (l *locator) IsValid() bool {

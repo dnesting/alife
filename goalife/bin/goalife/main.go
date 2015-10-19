@@ -23,13 +23,16 @@ import "github.com/dnesting/alife/goalife/census"
 import "github.com/dnesting/alife/goalife/grid2d"
 import "github.com/dnesting/alife/goalife/grid2d/autosave"
 import "github.com/dnesting/alife/goalife/grid2d/food"
+
 import "github.com/dnesting/alife/goalife/grid2d/maintain"
 import "github.com/dnesting/alife/goalife/grid2d/org"
-import "github.com/dnesting/alife/goalife/grid2d/org/driver/cpu1"
+import "github.com/dnesting/alife/goalife/grid2d/org/cpu1"
 import "github.com/dnesting/alife/goalife/log"
 import "github.com/dnesting/alife/goalife/term"
 
 var Logger = log.Null()
+
+const initialEnergy = 10000
 
 var (
 	debug         bool
@@ -60,7 +63,7 @@ func startOrg(g grid2d.Grid) {
 	c := cpu1.Random()
 	o := org.Random()
 	o.Driver = c
-	o.AddEnergy(1000)
+	o.AddEnergy(initialEnergy)
 	for {
 		if _, loc := g.PutRandomly(o, org.PutWhenFood); loc != nil {
 			go func() {
@@ -113,6 +116,7 @@ func main() {
 		//grid2d.Logger = l
 		//maintain.Logger = l
 	}
+
 	if pprof {
 		runtime.SetBlockProfileRate(1000)
 		go func() {
@@ -127,7 +131,9 @@ func main() {
 		cond = sync.NewCond(&sync.Mutex{})
 	}
 
-	census.RegisterGobTypes()
+	gob.Register(time.Time{})
+	gob.Register(&cpu1.Cpu{})
+	gob.Register(&food.Food{})
 	gob.Register(&org.Organism{})
 
 	g := grid2d.New(0, 0, exit, cond)
@@ -142,30 +148,33 @@ func main() {
 
 	var ch chan []grid2d.Update
 	ch = make(chan []grid2d.Update, 0)
-	g.Subscribe(ch, grid2d.Unbuffered)
 	cns, err := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
 	if err != nil {
 		fmt.Printf("Error creating census: %v\n", err)
 		os.Exit(1)
 	}
-	go census.WatchWorld(cns, g, ch, func() interface{} { return time.Now() }, orgHash)
-
-	startAll(g)
+	timeNow := func() interface{} { return time.Now() }
+	g.Subscribe(ch, grid2d.Unbuffered)
+	grid2d.ScanForCensus(cns, g, timeNow, orgHash)
+	go grid2d.WatchForCensus(cns, g, ch, timeNow, orgHash)
 
 	ch = make(chan []grid2d.Update, 0)
 	mCount := maintain.Count(g, isOrg)
 	g.Subscribe(ch, grid2d.Unbuffered)
+
+	startAll(g)
+
 	go maintain.Maintain(g, ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
 
 	var numUpdates int64
 
 	ch = make(chan []grid2d.Update, 0)
-	g.Subscribe(ch, grid2d.Unbuffered)
 	go func() {
 		for updates := range ch {
 			atomic.AddInt64(&numUpdates, int64(len(updates)))
 		}
 	}()
+	g.Subscribe(ch, grid2d.Unbuffered)
 
 	if saveFile != "" && saveEvery != 0 {
 		go func() {
@@ -177,11 +186,6 @@ func main() {
 		}()
 	}
 
-	g.Put(10, 10, food.New(10), grid2d.PutAlways)
-	g.Put(11, 11, food.New(2000), grid2d.PutAlways)
-	g.Put(12, 12, food.New(3000), grid2d.PutAlways)
-	g.Put(13, 13, food.New(8000), grid2d.PutAlways)
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 
@@ -189,7 +193,7 @@ func main() {
 		freq := time.Duration(1000000.0/printRate) * time.Microsecond
 		ch = make(chan []grid2d.Update, 0)
 		g.Subscribe(ch, grid2d.BufferLast)
-		ch := grid2d.RateLimited(ch, freq, 0)
+		ch := grid2d.RateLimited(ch, freq, 0, true)
 
 		go func() {
 			runtime.LockOSThread()
@@ -204,6 +208,7 @@ func main() {
 				}
 				fmt.Printf("%d updates\n", atomic.LoadInt64(&numUpdates))
 				fmt.Printf("%d/%d orgs (%d/%d species, %d recorded)\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime(), cns.NumRecorded())
+				fmt.Printf("random: %v\n", g.Get(0, 0).Value())
 				if cond != nil {
 					cond.Broadcast()
 				}

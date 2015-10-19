@@ -164,7 +164,7 @@ func (g *grid) putLocked(x, y int, n interface{}, fn PutWhenFunc) (interface{}, 
 	}
 	var loc *locator
 	if n != nil {
-		loc = &locator{g, x, y, n, false}
+		loc = newLocator(g, x, y, n)
 	}
 	origLoc.invalidate()
 	g.data[g.offset(x, y)] = loc

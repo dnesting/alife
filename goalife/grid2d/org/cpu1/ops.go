@@ -295,7 +295,8 @@ func OpDivide(o *org.Organism, c *Cpu) error {
 	if rand.Float32() < MutationRate {
 		nc.Mutate()
 	}
-	n, err := o.Divide(nc, float64(c.R[0])/256.0)
+	//n, err := o.Divide(nc, float64(c.R[0])/256.0)
+	n, err := o.Divide(nc, 0.5)
 	if err == org.ErrNotEmpty {
 		return nil
 	}

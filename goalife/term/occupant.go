@@ -2,7 +2,7 @@ package term
 
 import "github.com/dnesting/alife/goalife/grid2d/food"
 import "github.com/dnesting/alife/goalife/grid2d/org"
-import "github.com/dnesting/alife/goalife/grid2d/org/driver/cpu1"
+import "github.com/dnesting/alife/goalife/grid2d/org/cpu1"
 
 func RuneForOccupant(o interface{}) rune {
 	switch o := o.(type) {
