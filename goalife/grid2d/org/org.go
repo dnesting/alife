@@ -28,7 +28,7 @@ type Organism struct {
 }
 
 func (o *Organism) String() string {
-	return fmt.Sprintf("[org %v e=%v d=%v %v]", o.loc, o.Energy(), o.Dir, o.Driver)
+	return fmt.Sprintf("[org %v e=%v d=%c %v]", o.loc, o.Energy(), o.Arrow(), o.Driver)
 }
 
 func (o *Organism) UseLocator(loc grid2d.Locator) {
@@ -72,6 +72,29 @@ func (o *Organism) Die() {
 	runtime.Gosched()
 }
 
+func (o *Organism) Arrow() rune {
+	switch o.Dir {
+	case 0:
+		return '→'
+	case 1:
+		return '↗'
+	case 2:
+		return '↑'
+	case 3:
+		return '↖'
+	case 4:
+		return '←'
+	case 5:
+		return '↙'
+	case 6:
+		return '↓'
+	case 7:
+		return '↘'
+	default:
+		panic(fmt.Sprintf("out of range direction %d", o.Dir))
+	}
+}
+
 func (o *Organism) delta(dist int) (int, int) {
 	switch o.Dir {
 	case 0:
@@ -91,7 +114,7 @@ func (o *Organism) delta(dist int) (int, int) {
 	case 7:
 		return dist * 1, dist * 1
 	default:
-		panic(fmt.Sprintf("out of range direction %d"))
+		panic(fmt.Sprintf("out of range direction %d", o.Dir))
 	}
 }
 
@@ -127,7 +150,7 @@ var PutWhenFood = func(orig, n interface{}) bool {
 
 func (o *Organism) Divide(driver interface{}, energyFrac float64) (*Organism, error) {
 	Logger.Printf("%v.Divide(%v, %v)\n", o, driver, energyFrac)
-	if err := o.Discharge(5); err != nil {
+	if err := o.Discharge(BodyEnergy); err != nil {
 		return nil, err
 	}
 
@@ -136,6 +159,8 @@ func (o *Organism) Divide(driver interface{}, energyFrac float64) (*Organism, er
 	dx, dy := o.delta(1)
 	if _, loc := o.loc.Put(dx, dy, n, PutWhenFood); loc != nil {
 		energy.Transfer(n, o, int(float64(o.Energy())*energyFrac))
+		Logger.Printf("- parent: %v\n", o)
+		Logger.Printf("-  child: %v\n", n)
 		runtime.Gosched()
 		return n, nil
 	}
@@ -161,7 +186,7 @@ func (o *Organism) Sense(fn func(o interface{}) float64) float64 {
 
 func (o *Organism) Eat(amt int) (int, error) {
 	Logger.Printf("%v.Eat(%v)\n", o, amt)
-	if err := o.Discharge(amt / 100); err != nil {
+	if err := o.Discharge(int(math.Ceil(float64(amt) / 100.0))); err != nil {
 		return 0, err
 	}
 	if n := o.loc.Get(o.delta(1)); n != nil {
@@ -170,6 +195,8 @@ func (o *Organism) Eat(amt int) (int, error) {
 			Logger.Printf("- is energetic\n")
 			amt, _, _ = energy.Transfer(o, n, amt)
 			Logger.Printf("- transferred %v\n", amt)
+			Logger.Printf("  - %v\n", o)
+			Logger.Printf("  - %v\n", n)
 			runtime.Gosched()
 			return -amt, nil
 		} else {

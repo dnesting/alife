@@ -155,7 +155,7 @@ func OpJump(o *org.Organism, c *Cpu) error {
 }
 
 func OpEat(o *org.Organism, c *Cpu) error {
-	if _, err := o.Eat(c.R[0]); err != nil {
+	if _, err := o.Eat(c.R[0] * 10); err != nil {
 		return err
 	}
 	return nil
