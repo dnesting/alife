@@ -3,6 +3,7 @@ package cpu1
 import "errors"
 import "fmt"
 
+import "github.com/dnesting/alife/goalife/grid2d"
 import "github.com/dnesting/alife/goalife/grid2d/org"
 import "github.com/dnesting/alife/goalife/log"
 
@@ -84,4 +85,16 @@ func (c *Cpu) readOp() (*Op, int) {
 		return nil, c.Ip + 1
 	}
 	return &Ops[b], c.Ip + 1
+}
+
+func StartAll(g grid2d.Grid) {
+	var locs []grid2d.Point
+	g.Locations(&locs)
+	for _, p := range locs {
+		if o, ok := p.V.(*org.Organism); ok {
+			if c, ok := o.Driver.(*Cpu); ok {
+				go c.Run(o)
+			}
+		}
+	}
 }

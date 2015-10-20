@@ -83,18 +83,6 @@ func startOrg(g grid2d.Grid) {
 	}
 }
 
-func startAll(g grid2d.Grid) {
-	var locs []grid2d.Point
-	g.Locations(&locs)
-	for _, p := range locs {
-		if o, ok := p.V.(*org.Organism); ok {
-			if c, ok := o.Driver.(*cpu1.Cpu); ok {
-				go c.Run(o)
-			}
-		}
-	}
-}
-
 func isOrg(o interface{}) bool {
 	_, ok := o.(*org.Organism)
 	return ok
@@ -158,7 +146,7 @@ func startAndMaintainOrgs(g grid2d.Grid) {
 	ch := make(chan []grid2d.Update, 0)
 	mCount := maintain.Count(g, isOrg)
 	g.Subscribe(ch, grid2d.Unbuffered)
-	startAll(g)
+	cpu1.StartAll(g)
 
 	go maintain.Maintain(g, ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
 }
