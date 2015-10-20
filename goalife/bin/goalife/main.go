@@ -130,7 +130,7 @@ func registerGob() {
 
 func startCensus(g grid2d.Grid) *census.DirCensus {
 	ch := make(chan []grid2d.Update, 0)
-	cns, err := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 30 })
+	cns, err := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 40 })
 	if err != nil {
 		fmt.Printf("Error creating census: %v\n", err)
 		os.Exit(1)
