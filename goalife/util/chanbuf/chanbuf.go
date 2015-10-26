@@ -6,41 +6,32 @@
 // Buffers provide a channel interface to a queue.
 package chanbuf
 
-type Accumulator interface {
+import "sync"
+
+type QueueWriter interface {
 	// Add adds an item to the queue.
 	Add(data interface{})
 	// Done signals that no more items will be added to the queue.
 	Done()
 }
 
-// SingleValue yields a single value from Next().
-type SingleValue interface {
-	Next() interface{}
-}
-
-// A SingleQueue is a queue that only emits a single value from its queue.
-type SingleQueue interface {
-	Accumulator
-	SingleValue
-}
-
-// MultiValue yields multiple values from Next().
-type MultiValue interface {
+type QueueReader interface {
+	// Next retrieves values in the queue and will block until values are available.
 	Next() []interface{}
 }
 
-// A MultiQueue is a queue that emits an aggregation of values from its queue.
-type MultiQueue interface {
-	Accumulator
-	MultiValue
+// A Queue is a queue that emits an aggregation of values from its inputs.
+type Queue interface {
+	QueueReader
+	QueueWriter
 }
 
-// queue is the underlying implementation for the queues.  We use the interface{} type
-// both in the single and multi versions of the queue.
+// queue is the underlying implementation for the queue.
 type queue struct {
 	cond *sync.Cond
-	data interface{}
+	data []interface{}
 	stop bool
+	fn   func(existing []interface{}, next interface{}) []interface{}
 }
 
 func initQueue() queue {
@@ -55,7 +46,7 @@ func (q *queue) checkNotStopped() {
 	}
 }
 
-func (q *queue) Next() interface{} {
+func (q *queue) Next() []interface{} {
 	q.c.L.Lock()
 	defer q.c.L.Unlock()
 	for q.u == nil && !q.stop {
@@ -73,107 +64,74 @@ func (q *queue) Done() {
 	q.c.Signal()
 }
 
-// singleQueue is a queue implementation that selectively chooses a single
-// value to hold in the queue.
-type singleQueue struct {
-	queue
-	fn func(existing, next interface{}) interface{}
-}
-
-func (q *singleQueue) Add(data interface{}) {
+func (q *queue) Add(data interface{}) {
 	q.queue.data = q.fn(q.queue.data, data)
 }
 
-// queueAll is a queue implementation that holds a slice of values accumulated
-// through Add calls.
-type queueAll struct {
-	queue queue
-}
+// QueueFilter is a func that decides how the queue returned from
+// NewQueue will aggregate its values.  It is passed the existing
+// values (which may be nil on the first invocation) and the next
+// value received, and is expected to return the new aggregation.
+type QueueFilter func(existing []interface{}, next interface{}) []interface{}
 
-func (q *queueAll) Next() []interface{} {
-	if value := q.queue.Next(); value != nil {
-		return value.([]interface{})
+func newQueue(filter QueueFilter) *queue {
+	return &queue{
+		cond: sync.NewCond(&sync.Mutex{}),
+		fn:   filter,
 	}
-	return nil
 }
 
-func (q *queueAll) Add(data interface{}) {
-	q.queue.c.L.Lock()
-	defer q.queue.c.L.Unlock()
-	q.queue.data = append(q.queue.data, data)
-	q.c.Signal()
-}
-
-func (q *queueAll) Done() {
-	q.queue.Done()
-}
-
-func queueSingle(ch <-chan interface{}, filter func(existing, next interface{}) interface{}) SingleQueue {
-	q := singleQueue{initQueue(), filter}
+// FromChan constructs a Queue receiving from the given channel
+// and aggregating according to the provided filter.  The queue will
+// stop yielding values from Next when ch is closed.
+func FromChan(ch <-chan interface{}, filter QueueFilter) QueueReader {
+	q := newQueue(fn)
 	go chanToQueue(ch, q)
 	return q
 }
 
-// Chan converts a readable channel of any type to a chan interface{}. This may simplify
-// calling some of the functions in this package.
-func Chan(ch interface{}) chan interface{} {
-	out := make(chan interface{})
-	chValue := reflect.ValueOf(ch)
-
-	go func() {
-		defer close(out)
-		for {
-			value, ok := chValue.Recv()
-			if !ok {
-				return
-			}
-			out <- value.Interface()
-		}
-	}()
-	return out
-}
-
-// QueueFirst creates a queue that holds a single value: the first value obtained from source whenever the
-// queue is empty. Additional values that arrive from source when the queue is full are discarded and source
-// should never block.
-func QueueFirst(source <-chan interface{}) SingleQueue {
-	return queueSingle(source, func(first, _ interface{}) interface{} { return first })
-}
-
-// QueueLast creates a queue that holds a single value: the most recent value obtained from source. Values
-// that arrived between a call to Next() and the most recent value received from source are discarded.
-func QueueLast(source <-chan interface{}) SingleQueue {
-	return queueSingle(source, func(_, last interface{}) interface{} { return last })
-}
-
-func chanToQueue(source <-chan interface{}, q SingleQueue) {
+func chanToQueue(source <-chan interface{}, q QueueWriter) {
 	for u := range source {
 		q.Add(u)
 	}
 	q.Done()
 }
 
-// QueueAll creates a queue that holds all values received from source.  These values are then returned
-// as a slice by calling Next().  There is no memory bound on this queue.
-func QueueAll(source <-chan interface{}) MultiQueue {
-	q := queueAll{initQueue()}
-	go chanToQueue(source, q)
-	return q
+// KeepFirst is a QueueFilter that results in the queue holding
+// only the first value obtained from the source when the queue is
+// empty.  Additional values that arrive from source when the queue
+// is full are discarded and the source should never block.
+func KeepFirst(existing []interface{}, next interface{}) []interface{} {
+	if existing == nil {
+		return []interface{}{next}
+	} else {
+		return existing
+	}
 }
 
-// BufferFirst creates a buffer between channels, allowing the source channel to remain unblocked
-// even if the sink channel is not ready.  See QueueFirst for more information.
-func BufferFirst(source <-chan interface{}, sink chan<- interface{}) {
-	bufferSingle(QueueFirst(source), sink)
+// KeepLast is a QueueFilter that results in the queue holding
+// only the last value obtained from the source.  Other values that
+// arrive from the source before the most recent value are discarded
+// and the source should never block.
+func KeepLast(existing []interface{}, next interface{}) []interface{} {
+	if existing == nil {
+		return []interface{}{next}
+	} else {
+		existing[0] = next
+		return existing
+	}
 }
 
-// BufferLast creates a buffer between channels, allowing the source channel to remain unblocked
-// even if the sink channel is not ready.  See QueueLast for more information.
-func BufferLast(source <-chan interface{}, sink chan<- interface{}) {
-	bufferSingle(QueueLast(source), sink)
+// KeepAll is a QueueFilter that results in the queue retaining
+// everything received from source.  There is no memory bound on
+// such a queue.
+func KeepAll(existing []interface{}, next interface{}) []interface{} {
+	return append(existing, next)
 }
 
-func bufferSingle(q SingleQueue, sink chan<- interface{}) {
+// Buffer reads from q and sends the received data to sink. When the
+// queue reports it is exhausted, sink will be closed.
+func Buffer(q QueueReader, sink chan<- interface{}) {
 	for {
 		data, ok := q.Next()
 		if ok {
@@ -185,38 +143,9 @@ func bufferSingle(q SingleQueue, sink chan<- interface{}) {
 	close(sink)
 }
 
-// BufferAll creates a buffer between channels, allowing the source channel to remain unblocked
-// even if the sink channel is not ready.  See QueueAll for more information.
-func BufferAll(source <-chan interface{}, sink chan<- []interface{}) {
-	q := QueueAll(source)
-	for {
-		data, ok := q.Next()
-		if ok {
-			sink <- data
-		} else {
-			break
-		}
-	}
-	close(sink)
-}
-
-// BufferedFirst runs BufferFirst in the background on a newly created and returned channel.
-func BufferedFirst(source <-chan interface{}) <-chan interface{} {
+// Buffered exposes q as a channel, running Buffer concurrently.
+func Buffered(q QueueReader) <-chan interface{} {
 	sink := make(chan interface{}, 0)
-	go BufferFirst(source, sink)
-	return sink
-}
-
-// BufferedLast runs BufferLast in the background on a newly created and returned channel.
-func BufferedLast(source <-chan interface{}) <-chan interface{} {
-	sink := make(chan interface{}, 0)
-	go BufferLast(source, sink)
-	return sink
-}
-
-// BufferedAll runs BufferAll in the background on a newly created and returned channel.
-func BufferedAll(source <-chan interface{}) <-chan []interface{} {
-	sink := make(chan []interface{}, 0)
-	go BufferAll(source, sink)
+	go Buffer(q, sink)
 	return sink
 }
