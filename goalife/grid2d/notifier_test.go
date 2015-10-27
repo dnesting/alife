@@ -43,7 +43,7 @@ func TestNotify(t *testing.T) {
 	}()
 
 	ch := make(chan []Update)
-	n.Subscribe(ch, Unbuffered)
+	n.Subscribe(ch)
 
 	got := <-ch
 	if !reflect.DeepEqual(got, tAdd) {

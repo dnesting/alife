@@ -29,6 +29,7 @@ import "github.com/dnesting/alife/goalife/grid2d/org"
 import "github.com/dnesting/alife/goalife/grid2d/org/cpu1"
 import "github.com/dnesting/alife/goalife/log"
 import "github.com/dnesting/alife/goalife/term"
+import "github.com/dnesting/alife/goalife/util/chanbuf"
 
 var Logger = log.Null()
 
@@ -136,7 +137,7 @@ func startCensus(g grid2d.Grid) *census.DirCensus {
 		os.Exit(1)
 	}
 	timeNow := func() interface{} { return time.Now() }
-	g.Subscribe(ch, grid2d.Unbuffered)
+	g.Subscribe(ch)
 	grid2d.ScanForCensus(cns, g, timeNow, orgHash)
 	go grid2d.WatchForCensus(cns, g, ch, timeNow, orgHash)
 	return cns
@@ -145,7 +146,7 @@ func startCensus(g grid2d.Grid) *census.DirCensus {
 func startAndMaintainOrgs(g grid2d.Grid) {
 	ch := make(chan []grid2d.Update, 0)
 	mCount := maintain.Count(g, isOrg)
-	g.Subscribe(ch, grid2d.Unbuffered)
+	g.Subscribe(ch)
 	cpu1.StartAll(g)
 
 	go maintain.Maintain(g, ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
@@ -158,7 +159,7 @@ func startUpdateTracker(g grid2d.Grid, numUpdates *int64) {
 			atomic.AddInt64(numUpdates, int64(len(updates)))
 		}
 	}()
-	g.Subscribe(ch, grid2d.Unbuffered)
+	g.Subscribe(ch)
 }
 
 func startAutosave(g grid2d.Grid, exit <-chan bool) {
@@ -195,11 +196,13 @@ func printLoop(ch <-chan []grid2d.Update, g grid2d.Grid, cns *census.DirCensus, 
 
 func startPrintLoop(g grid2d.Grid, cns *census.DirCensus, cond *sync.Cond, numUpdates *int64, clearScreen bool) {
 	freq := time.Duration(1000000.0/printRate) * time.Microsecond
-	ch := make(chan []grid2d.Update, 0)
-	g.Subscribe(ch, grid2d.BufferLast)
-	rateCh := grid2d.RateLimited(ch, freq, 0, true)
+	updateCh := make(chan []grid2d.Update, 0)
+	trigger := chanbuf.Trigger()
+	go chanbuf.Feed(trigger, grid2d.NotifyToInterface(updateCh))
+	tickCh := chanbuf.Tick(trigger, freq, true)
+	g.Subscribe(updateCh)
 
-	go printLoop(rateCh, g, cns, cond, numUpdates, clearScreen)
+	go printLoop(grid2d.NotifyFromInterface(tickCh), g, cns, cond, numUpdates, clearScreen)
 }
 
 func isTracing() bool {

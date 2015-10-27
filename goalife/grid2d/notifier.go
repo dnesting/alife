@@ -1,7 +1,5 @@
 package grid2d
 
-import "fmt"
-import "container/list"
 import "sync"
 
 type Update struct {
@@ -25,101 +23,14 @@ func (u Update) IsReplace() bool {
 	return u.Old != nil && u.New != nil && u.Old.V != u.New.V
 }
 
-type NotifyQueue interface {
-	Next() []Update
-	Add(u []Update)
-	Done()
-}
-
-type BufferedNotifyQueue struct {
-	style NotifyStyle
-	c     *sync.Cond
-	u     []Update
-	stop  bool
-}
-
-func (q *BufferedNotifyQueue) Next() []Update {
-	q.c.L.Lock()
-	defer q.c.L.Unlock()
-	for q.u == nil && !q.stop {
-		q.c.Wait()
-	}
-	if q.stop {
-		return nil
-	}
-	u := q.u
-	q.u = nil
-	return u
-}
-
-func (q *BufferedNotifyQueue) Add(u []Update) {
-	q.c.L.Lock()
-	defer q.c.L.Unlock()
-	switch q.style & (BufferFirst | BufferLast | BufferAll) {
-	case BufferFirst:
-		if q.u == nil {
-			q.u = u
-		}
-	case BufferLast:
-		q.u = u
-	case BufferAll:
-		q.u = append(q.u, u...)
-	default:
-		panic(fmt.Sprintf("illegal queue style: %v", q.style))
-	}
-	q.c.Signal()
-}
-
-func (q *BufferedNotifyQueue) Done() {
-	q.c.L.Lock()
-	defer q.c.L.Unlock()
-	q.stop = true
-	q.c.Signal()
-}
-
-type UnbufferedNotifyQueue chan []Update
-
-func (q UnbufferedNotifyQueue) Add(u []Update) {
-	q <- u
-}
-
-func (q UnbufferedNotifyQueue) Next() []Update {
-	return <-q
-}
-
-func (q UnbufferedNotifyQueue) Done() {
-	close(q)
-}
-
-func NewNotifyQueue(style NotifyStyle) NotifyQueue {
-	if style&Unbuffered != 0 {
-		return UnbufferedNotifyQueue(make(chan []Update, 0))
-	} else {
-		return &BufferedNotifyQueue{
-			style: style,
-			c:     sync.NewCond(&sync.Mutex{}),
-		}
-	}
-}
-
-func notifyFromQueue(ch chan<- []Update, queue NotifyQueue) {
-	for u := queue.Next(); u != nil; u = queue.Next() {
-		ch <- u
-	}
-	close(ch)
-}
-
 type notifier struct {
-	cond sync.Cond
-	u    list.List
 	mu   sync.Mutex
-	subs map[chan<- []Update]NotifyQueue
+	subs []chan<- []Update
 }
 
 func newNotifier(done <-chan bool) *notifier {
 	n := &notifier{
-		cond: sync.Cond{L: &sync.Mutex{}},
-		subs: make(map[chan<- []Update]NotifyQueue),
+		subs: make([]chan<- []Update, 0),
 	}
 	go func() {
 		<-done
@@ -131,26 +42,27 @@ func newNotifier(done <-chan bool) *notifier {
 func (n *notifier) Done() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for _, q := range n.subs {
-		q.Done()
+	for _, ch := range n.subs {
+		close(ch)
 	}
 }
 
-func (n *notifier) Subscribe(ch chan<- []Update, style NotifyStyle) {
+func (n *notifier) Subscribe(ch chan<- []Update) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	q := NewNotifyQueue(style)
-	n.subs[ch] = q
-	go notifyFromQueue(ch, q)
+	n.subs = append(n.subs, ch)
 }
 
 func (n *notifier) Unsubscribe(ch chan<- []Update) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if q, ok := n.subs[ch]; ok {
-		q.Done()
-		delete(n.subs, ch)
+	subs := make([]chan<- []Update, 0, len(n.subs))
+	for _, s := range n.subs {
+		if s != ch {
+			subs = append(subs, s)
+		}
 	}
+	n.subs = subs
 }
 
 func (n *notifier) RecordAdd(x, y int, value interface{}) {
@@ -185,7 +97,48 @@ func (n *notifier) RecordReplace(x, y int, orig, repl interface{}) {
 func (n *notifier) add(u []Update) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for _, q := range n.subs {
-		q.Add(u)
+	for _, ch := range n.subs {
+		ch <- u
 	}
+}
+
+// NotifyToInterface effectively provides a type conversion from a
+// grid2d notification channel (of type []Update) to interface{} for
+// use with queueing and rate-limiting functions in util/chanbuf.
+// This introduces some modest overhead since Go doesn't support this
+// type of type conversion directly.
+func NotifyToInterface(ch <-chan []Update) <-chan interface{} {
+	chained := make(chan interface{})
+	go func() {
+		for x := range ch {
+			chained <- x
+		}
+		close(chained)
+	}()
+	return chained
+}
+
+// NotifyFromInterface effectively provides a type conversion from the
+// aggregated []interface{} type used by the queueing and rate-limiting
+// functions in util/chanbuf, to  the grid2d notification channel (of
+// type []Update).  In the process, de-aggregates the aggregated
+// messages, potentially sending multiple messages to the returned
+// channel for every one message received by ch. This introduces some
+// modest overhead since Go doesn't support this type of type conversion
+// directly.
+func NotifyFromInterface(ch <-chan []interface{}) <-chan []Update {
+	chained := make(chan []Update)
+	go func() {
+		for x := range ch {
+			if x != nil {
+				for _, y := range x {
+					chained <- y.([]Update)
+				}
+			} else {
+				chained <- nil
+			}
+		}
+		close(chained)
+	}()
+	return chained
 }

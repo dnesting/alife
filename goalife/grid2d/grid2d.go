@@ -46,7 +46,7 @@ type Grid interface {
 	Resize(width, height int, removedFn func(x, y int, o interface{}))
 	Wait()
 
-	Subscribe(ch chan<- []Update, style NotifyStyle)
+	Subscribe(ch chan<- []Update)
 	Unsubscribe(ch chan<- []Update)
 }
 
