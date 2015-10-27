@@ -27,7 +27,7 @@ func Count(g grid2d.Grid, fn CounterFunc) int {
 // Maintain watches ch and invokes fn to keep the number of counted occupants above keep.
 // Only occupants satisfying counterFn will be counted.  Invoking fn must (eventually) result
 // in increasing the count of occupants satisfying counterFn by at least 1.
-func Maintain(ch <-chan []grid2d.Update, counterFn func(o interface{}) bool, fn func(), keep int, initial int) {
+func Maintain(ch <-chan []grid2d.Update, counterFn CounterFunc, fn func(), keep int, initial int) {
 	count := initial
 
 	if count < keep {
