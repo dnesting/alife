@@ -1,3 +1,5 @@
+// Package cpu1 contains an implementation of an org.Organism driver that
+// drives the organism using a simple virtual machine.
 package cpu1
 
 import "errors"
@@ -9,7 +11,7 @@ import "github.com/dnesting/alife/goalife/log"
 
 var Logger = log.Null()
 
-// Cpu is a simple 8-bit CPU with 4 registers.
+// Cpu is a simple 8-bit CPU with 4 registers and associated bytecode.
 type Cpu struct {
 	Ip   int // Instruction Pointer, an index into Code for the next instruction
 	Code Bytecode
@@ -20,21 +22,29 @@ func (c *Cpu) String() string {
 	return fmt.Sprintf("[cpu %x ip=%d %v]", c.Code.Hash(), c.Ip, c.R)
 }
 
+// Copy returns a new Cpu with the same Code.  The Cpu's instruction pointer
+// and registers are not copied.
 func (c *Cpu) Copy() *Cpu {
 	return &Cpu{
 		Code: c.Code,
 	}
 }
 
+// Mutate causes the Cpu's Code to be mutated.
 func (c *Cpu) Mutate() {
 	Logger.Printf("%v.Mutate()", c)
 	c.Code.Mutate(Ops)
 }
 
+// Hash identifies the Cpu by its bytecode.  This is used to establish the
+// "genome" of the organism's driver so that the census can track the population
+// running the same bytecode.
 func (c *Cpu) Hash() uint64 {
 	return c.Code.Hash()
 }
 
+// Random generates a Cpu with random bytecode.  Its instruction pointer and
+// registers are initialized to zeros.
 func Random() *Cpu {
 	return &Cpu{
 		Code: RandomBytecode(Ops),
@@ -43,8 +53,10 @@ func Random() *Cpu {
 
 var unableToReadErr = errors.New("unable to read next instruction")
 
-// Step executes one CPU operation.  Any error or panic that occurs will result in an error
-// being returned.  Execution is expected to cease if an error is returned.
+// Step executes one CPU operation.  Any error returned either assessing the
+// operation's energy cost or executing it will be returned by this method.
+// Execution is expected to cease (and the organism's Die method
+// invoked) if an error is returned.
 func (c *Cpu) Step(o *org.Organism) (err error) {
 	op, ip := c.readOp()
 	c.Ip = ip
@@ -53,7 +65,8 @@ func (c *Cpu) Step(o *org.Organism) (err error) {
 	}
 	Logger.Printf("%v.Step(%v): %v\n", c, o, op)
 
-	if err := o.Discharge(op.Cost); err != nil {
+	// All operations cost at least 1 energy, to avoid infinite loops.
+	if err := o.Discharge(1 + op.Cost); err != nil {
 		return err
 	}
 
@@ -64,6 +77,8 @@ func (c *Cpu) Step(o *org.Organism) (err error) {
 	return nil
 }
 
+// Run executes Step repeatedly, until Step returns an error, at which point this
+// method will invoke o.Die and return.
 func (c *Cpu) Run(o *org.Organism) error {
 	Logger.Printf("%v.Run(%v)\n", c, o)
 	for {
@@ -87,6 +102,8 @@ func (c *Cpu) readOp() (*Op, int) {
 	return &Ops[b], c.Ip + 1
 }
 
+// StartAll finds all organisms driven by Cpu instances, and spawns a goroutine
+// to begin executing each Cpu instance found.
 func StartAll(g grid2d.Grid) {
 	var locs []grid2d.Point
 	g.Locations(&locs)

@@ -5,11 +5,11 @@ import "fmt"
 
 import "github.com/dnesting/alife/goalife/grid2d/org"
 
-// Op represents a single named instruction.
+// op represents a single named instruction.
 type Op struct {
 	Name string                              // the symbolic name of the instruction
 	Fn   func(o *org.Organism, c *Cpu) error // what gets executed for this instruction
-	Cost int                                 // the instruction's energy cost
+	Cost int                                 // the instruction's energy cost (above the default 1)
 }
 
 func (o Op) String() string {

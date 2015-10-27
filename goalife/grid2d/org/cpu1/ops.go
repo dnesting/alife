@@ -5,94 +5,99 @@ import "math/rand"
 
 import "github.com/dnesting/alife/goalife/grid2d/org"
 
-const MutationRate = 0.01
+// MutationRate specifies the rate at which mutations occur during a Divide operation.
+var MutationRate = 0.01
 
+// ErrDivisionByZero is reported when an opcode would result in division by zero.
 var ErrDivisionByZero = errors.New("division by zero")
 
+// ops contains the actual optable for cpu1.
 var Ops OpTable
 
 func init() {
+	// Note: Modifying opcodes risks making any organisms saved by the census nonviable.
 	Ops = OpTable([]Op{
-		// 0
-		Op{"XXX", OpNoop, 1},
-		Op{"L1", OpNoop, 1},
-		Op{"L2", OpNoop, 1},
-		Op{"L3", OpNoop, 1},
-		Op{"L4", OpNoop, 1},
+		Op{"XXX", opNoop, 0},
 
-		Op{"Jump1", OpJump1, 1},
-		Op{"Jump2", OpJump2, 1},
-		Op{"Jump3", OpJump3, 1},
-		Op{"Jump4", OpJump4, 1},
+		// L1-L4 represent labels used by opJumpN and opJumpRN opcodes.
+		Op{"L1", opNoop, 0},
+		Op{"L2", opNoop, 0},
+		Op{"L3", opNoop, 0},
+		Op{"L4", opNoop, 0},
 
-		Op{"JumpR1", OpJumpR1, 1},
-		Op{"JumpR2", OpJumpR2, 1},
-		Op{"JumpR3", OpJumpR3, 1},
-		Op{"JumpR4", OpJumpR4, 1},
+		Op{"Jump1", opJump1, 0},
+		Op{"Jump2", opJump2, 0},
+		Op{"Jump3", opJump3, 0},
+		Op{"Jump4", opJump4, 0},
 
-		Op{"SwapAB", OpSwapAB, 1},
-		Op{"SwapAC", OpSwapAC, 1},
-		Op{"SwapAD", OpSwapAD, 1},
+		Op{"JumpR1", opJumpR1, 0},
+		Op{"JumpR2", opJumpR2, 0},
+		Op{"JumpR3", opJumpR3, 0},
+		Op{"JumpR4", opJumpR4, 0},
 
-		Op{"Zero", OpZero, 1},
-		Op{"Shl0", OpShl0, 1},
-		Op{"Shl1", OpShl1, 1},
-		Op{"Shr", OpShr, 1},
+		Op{"SwapAB", opSwapAB, 0},
+		Op{"SwapAC", opSwapAC, 0},
+		Op{"SwapAD", opSwapAD, 0},
 
-		Op{"Inc", OpInc, 1},
-		Op{"Dec", OpDec, 1},
+		Op{"Zero", opZero, 0},
+		Op{"Shl0", opShl0, 0},
+		Op{"Shl1", opShl1, 0},
+		Op{"Shr", opShr, 0},
 
-		Op{"Add", OpAdd, 1},
-		Op{"Sub", OpSub, 1},
-		Op{"Div", OpDiv, 1},
-		Op{"Mul", OpMul, 1},
+		Op{"Inc", opInc, 0},
+		Op{"Dec", opDec, 0},
 
-		Op{"And", OpAnd, 1},
-		Op{"Or", OpOr, 1},
-		Op{"Xor", OpXor, 1},
-		Op{"Mod", OpMod, 1},
+		Op{"Add", opAdd, 0},
+		Op{"Sub", opSub, 0},
+		Op{"Div", opDiv, 0},
+		Op{"Mul", opMul, 0},
 
-		Op{"IfEq", OpIfEq, 1},
-		Op{"IfNe", OpIfNe, 1},
-		Op{"IfGt", OpIfGt, 1},
-		Op{"IfLt", OpIfLt, 1},
+		Op{"And", opAnd, 0},
+		Op{"Or", opOr, 0},
+		Op{"Xor", opXor, 0},
+		Op{"Mod", opMod, 0},
 
-		Op{"IfZ", OpIfZ, 1},
-		Op{"IfNZ", OpIfNZ, 1},
-		Op{"IfLoop", OpIfLoop, 1},
-		Op{"Jump", OpJump, 1},
+		Op{"IfEq", opIfEq, 0},
+		Op{"IfNe", opIfNe, 0},
+		Op{"IfGt", opIfGt, 0},
+		Op{"IfLt", opIfLt, 0},
 
-		Op{"Eat", OpEat, 5},
-		Op{"Left", OpLeft, 5},
-		Op{"Right", OpRight, 5},
-		Op{"Forward", OpForward, 10},
+		Op{"IfZ", opIfZ, 0},
+		Op{"IfNZ", opIfNZ, 0},
+		Op{"IfLoop", opIfLoop, 0},
+		Op{"Jump", opJump, 0},
 
-		Op{"Divide", OpDivide, 1},
-		Op{"Sense", OpSense, 1},
-		Op{"SenseOthers", OpSenseOthers, 1},
+		Op{"Eat", opEat, 5},
+		Op{"Left", opLeft, 5},
+		Op{"Right", opRight, 5},
+		Op{"Forward", opForward, 10},
+
+		Op{"Divide", opDivide, 0},
+		Op{"Sense", opSense, 0},
+		Op{"SenseOthers", opSenseOthers, 0},
 	})
 }
 
-func OpNone(o *org.Organism, c *Cpu) error {
-	return nil
-}
-
-func OpSwapAB(o *org.Organism, c *Cpu) error {
+// opSwapAB: A, B = B, A
+func opSwapAB(o *org.Organism, c *Cpu) error {
 	c.R[0], c.R[1] = c.R[1], c.R[0]
 	return nil
 }
 
-func OpSwapAC(o *org.Organism, c *Cpu) error {
+// opSwapAC: A, C = C, A
+func opSwapAC(o *org.Organism, c *Cpu) error {
 	c.R[0], c.R[2] = c.R[2], c.R[0]
 	return nil
 }
 
-func OpSwapAD(o *org.Organism, c *Cpu) error {
+// opSwapAD: A, D = D, A
+func opSwapAD(o *org.Organism, c *Cpu) error {
 	c.R[0], c.R[3] = c.R[3], c.R[0]
 	return nil
 }
 
-func OpZero(o *org.Organism, c *Cpu) error {
+// opZero: A = 0
+func opZero(o *org.Organism, c *Cpu) error {
 	c.R[0] = 0
 	return nil
 }
@@ -115,32 +120,38 @@ func clip(v, min, max int) int {
 	return v
 }
 
-func OpShl0(o *org.Organism, c *Cpu) error {
+// opShl0: A <<= 1
+func opShl0(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] << 1)
 	return nil
 }
 
-func OpShl1(o *org.Organism, c *Cpu) error {
+// opShl1: A = A<<1 | 1
+func opShl1(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0]<<1) | 1
 	return nil
 }
 
-func OpShr(o *org.Organism, c *Cpu) error {
+// opShr: A >>= 1
+func opShr(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] >> 1)
 	return nil
 }
 
-func OpInc(o *org.Organism, c *Cpu) error {
+// opInc: A++
+func opInc(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] + 1)
 	return nil
 }
 
-func OpDec(o *org.Organism, c *Cpu) error {
+// opDec: A--
+func opDec(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] - 1)
 	return nil
 }
 
-func OpIfLoop(o *org.Organism, c *Cpu) error {
+// opIfLoop: if C > 0 { execute next instruction } else skip
+func opIfLoop(o *org.Organism, c *Cpu) error {
 	if c.R[2] > 0 {
 		c.R[2] -= 1
 	} else {
@@ -149,41 +160,48 @@ func OpIfLoop(o *org.Organism, c *Cpu) error {
 	return nil
 }
 
-func OpJump(o *org.Organism, c *Cpu) error {
+// opJump: IP = D
+func opJump(o *org.Organism, c *Cpu) error {
 	c.Ip = c.R[3]
 	return nil
 }
 
-func OpEat(o *org.Organism, c *Cpu) error {
+// opEat: Consume A*10 energy from neighbor
+func opEat(o *org.Organism, c *Cpu) error {
 	if _, err := o.Eat(c.R[0] * 10); err != nil {
 		return err
 	}
 	return nil
 }
 
-func OpLeft(o *org.Organism, c *Cpu) error {
+// opLeft: turn left
+func opLeft(o *org.Organism, c *Cpu) error {
 	o.Left()
 	return nil
 }
 
-func OpRight(o *org.Organism, c *Cpu) error {
+// opRight: turn right
+func opRight(o *org.Organism, c *Cpu) error {
 	o.Right()
 	return nil
 }
 
-func OpForward(o *org.Organism, c *Cpu) error {
+// opForward: move forward if able
+func opForward(o *org.Organism, c *Cpu) error {
 	if err := o.Forward(); err != nil && err != org.ErrNotEmpty {
 		return err
 	}
 	return nil
 }
 
-func OpSense(o *org.Organism, c *Cpu) error {
+// opSense: sense energy ahead, capped at 255
+func opSense(o *org.Organism, c *Cpu) error {
 	c.R[0] = clip(int(o.Sense(nil)), 0, 255)
 	return nil
 }
 
-func OpSenseOthers(o *org.Organism, c *Cpu) error {
+// opSenseOthers: sense energy ahead, excluding those with the same bytecode, capped at 255
+func opSenseOthers(o *org.Organism, c *Cpu) error {
 	filter := func(n interface{}) float64 {
 		if org, ok := n.(*org.Organism); ok {
 			if nc, ok := org.Driver.(*Cpu); ok {
@@ -198,22 +216,26 @@ func OpSenseOthers(o *org.Organism, c *Cpu) error {
 	return nil
 }
 
-func OpAdd(o *org.Organism, c *Cpu) error {
+// opAdd: A += B
+func opAdd(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] + c.R[1])
 	return nil
 }
 
-func OpSub(o *org.Organism, c *Cpu) error {
+// opSub: A -= B
+func opSub(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] - c.R[1])
 	return nil
 }
 
-func OpMul(o *org.Organism, c *Cpu) error {
+// opMul: A *= B
+func opMul(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] * c.R[1])
 	return nil
 }
 
-func OpDiv(o *org.Organism, c *Cpu) error {
+// opDiv: A /= B (may return ErrDivisionByZero)
+func opDiv(o *org.Organism, c *Cpu) error {
 	if c.R[1] == 0 {
 		return ErrDivisionByZero
 	}
@@ -221,22 +243,26 @@ func OpDiv(o *org.Organism, c *Cpu) error {
 	return nil
 }
 
-func OpAnd(o *org.Organism, c *Cpu) error {
+// opAnd: A &= B
+func opAnd(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] & c.R[1])
 	return nil
 }
 
-func OpOr(o *org.Organism, c *Cpu) error {
+// opOr: A |= B
+func opOr(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] | c.R[1])
 	return nil
 }
 
-func OpXor(o *org.Organism, c *Cpu) error {
+// opXor: A ^= B
+func opXor(o *org.Organism, c *Cpu) error {
 	c.R[0] = asUByte(c.R[0] ^ c.R[1])
 	return nil
 }
 
-func OpMod(o *org.Organism, c *Cpu) error {
+// opMod: A %= B (may return ErrDivisionByZero)
+func opMod(o *org.Organism, c *Cpu) error {
 	if c.R[1] == 0 {
 		return ErrDivisionByZero
 	}
@@ -244,59 +270,66 @@ func OpMod(o *org.Organism, c *Cpu) error {
 	return nil
 }
 
-func OpIfEq(o *org.Organism, c *Cpu) error {
+// opIfEq: if A == B { execute next instruction } else skip
+func opIfEq(o *org.Organism, c *Cpu) error {
 	if !(c.R[0] == c.R[1]) {
 		c.Ip += 1
 	}
 	return nil
 }
 
-func OpIfNe(o *org.Organism, c *Cpu) error {
+// opIfNe: if A != B { execute next instruction } else skip
+func opIfNe(o *org.Organism, c *Cpu) error {
 	if !(c.R[0] != c.R[1]) {
 		c.Ip += 1
 	}
 	return nil
 }
 
-func OpIfLt(o *org.Organism, c *Cpu) error {
+// opIfLt: if A < B { execute next instruction } else skip
+func opIfLt(o *org.Organism, c *Cpu) error {
 	if !(c.R[0] < c.R[1]) {
 		c.Ip += 1
 	}
 	return nil
 }
 
-func OpIfGt(o *org.Organism, c *Cpu) error {
+// opIfGt: if A > B { execute next instruction } else skip
+func opIfGt(o *org.Organism, c *Cpu) error {
 	if !(c.R[0] > c.R[1]) {
 		c.Ip += 1
 	}
 	return nil
 }
 
-func OpIfZ(o *org.Organism, c *Cpu) error {
+// opIfZ: if A == 0 { execute next instruction } else skip
+func opIfZ(o *org.Organism, c *Cpu) error {
 	if !(c.R[0] == 0) {
 		c.Ip += 1
 	}
 	return nil
 }
 
-func OpIfNZ(o *org.Organism, c *Cpu) error {
+// opIfNZ: if A != 0 { execute next instruction } else skip
+func opIfNZ(o *org.Organism, c *Cpu) error {
 	if !(c.R[0] != 0) {
 		c.Ip += 1
 	}
 	return nil
 }
 
-func OpDivide(o *org.Organism, c *Cpu) error {
+// opDivide: spawn a new organism in neighboring cell with same bytecode
+// and energy fraction described by A/256.
+func opDivide(o *org.Organism, c *Cpu) error {
 	lenc := len(c.Code)
 	if err := o.Discharge(lenc); err != nil {
 		return err
 	}
 	nc := c.Copy()
-	if rand.Float32() < MutationRate {
+	if rand.Float64() < MutationRate {
 		nc.Mutate()
 	}
-	//n, err := o.Divide(nc, float64(c.R[0])/256.0)
-	n, err := o.Divide(nc, 0.5)
+	n, err := o.Divide(nc, float64(c.R[0])/256.0)
 	if err == org.ErrNotEmpty {
 		return nil
 	}
@@ -307,39 +340,55 @@ func OpDivide(o *org.Organism, c *Cpu) error {
 	return nil
 }
 
-func OpNoop(o *org.Organism, c *Cpu) error {
+// opNoop: No-op
+func opNoop(o *org.Organism, c *Cpu) error {
 	return nil
 }
 
-func OpJump1(o *org.Organism, c *Cpu) error {
+// opJump1: Jump forward to label A
+func opJump1(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.find(1, c.Ip)
 	return nil
 }
-func OpJump2(o *org.Organism, c *Cpu) error {
+
+// opJump2: Jump forward to label B
+func opJump2(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.find(2, c.Ip)
 	return nil
 }
-func OpJump3(o *org.Organism, c *Cpu) error {
+
+// opJump3: Jump forward to label C
+func opJump3(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.find(3, c.Ip)
 	return nil
 }
-func OpJump4(o *org.Organism, c *Cpu) error {
+
+// opJump4: Jump forward to label D
+func opJump4(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.find(4, c.Ip)
 	return nil
 }
-func OpJumpR1(o *org.Organism, c *Cpu) error {
+
+// opJumpR1: Jump backward to label A
+func opJumpR1(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.findBackward(1, c.Ip)
 	return nil
 }
-func OpJumpR2(o *org.Organism, c *Cpu) error {
+
+// opJumpR2: Jump backward to label B
+func opJumpR2(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.findBackward(2, c.Ip)
 	return nil
 }
-func OpJumpR3(o *org.Organism, c *Cpu) error {
+
+// opJumpR3: Jump backward to label C
+func opJumpR3(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.findBackward(3, c.Ip)
 	return nil
 }
-func OpJumpR4(o *org.Organism, c *Cpu) error {
+
+// opJumpR4: Jump backward to label D
+func opJumpR4(o *org.Organism, c *Cpu) error {
 	c.Ip = c.Code.findBackward(4, c.Ip)
 	return nil
 }
