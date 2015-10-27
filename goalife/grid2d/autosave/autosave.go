@@ -1,3 +1,4 @@
+// Package autosave provides a method for saving and storing a grid2d.
 package autosave
 
 import "encoding/gob"
@@ -8,6 +9,7 @@ import "time"
 
 import "github.com/dnesting/alife/goalife/grid2d"
 
+// Save writes g to filename.
 func Save(filename string, g grid2d.Grid) error {
 	dir := path.Dir(filename)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -34,6 +36,7 @@ func Save(filename string, g grid2d.Grid) error {
 	return nil
 }
 
+// Restore restores the contents of g from filename.
 func Restore(filename string, g grid2d.Grid) error {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -48,8 +51,9 @@ func Restore(filename string, g grid2d.Grid) error {
 	return nil
 }
 
-func Loop(filename string, g grid2d.Grid, every time.Duration, exit <-chan bool) error {
-	ch := time.Tick(every)
+// Loop calls Save every freq.  Stops saving when exit yields a value.
+func Loop(filename string, g grid2d.Grid, freq time.Duration, exit <-chan bool) error {
+	ch := time.Tick(freq)
 	for {
 		select {
 		case <-ch:

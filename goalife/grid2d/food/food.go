@@ -17,13 +17,16 @@ type Food struct {
 	loc grid2d.Locator
 }
 
+// Try to re-use Food instances because these are little objects that are
+// frequently instantiated and destroyed.
 var foodPool = sync.Pool{New: func() interface{} { return &Food{} }}
 
 func (f *Food) String() string {
 	return fmt.Sprintf("[food %d]", f.Energy())
 }
 
-// NewFood creates a new Food instance with the given energy level.
+// New creates a new Food instance with the given energy level.  Attempts to
+// allocate these from a sync.Pool if any are available.
 func New(amt int) *Food {
 	f := foodPool.Get().(*Food)
 	f.ResetEnergy(amt)
