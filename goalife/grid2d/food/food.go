@@ -1,3 +1,5 @@
+// Package food defines a simple energy store with awareness of its
+// existence in a grid2d.
 package food
 
 import "fmt"
@@ -6,9 +8,10 @@ import "sync"
 import "github.com/dnesting/alife/goalife/energy"
 import "github.com/dnesting/alife/goalife/grid2d"
 
-// Food is a type of battery that, when its energy drops to zero, its OnEmpty func is called.
+// Food is a type of energy store that, when its energy drops to
+// zero, calls loc.RemoveWithPlaceholder(energy.Null).
 type Food struct {
-	energy.Battery
+	energy.Store
 
 	mu  sync.Mutex
 	loc grid2d.Locator
@@ -23,7 +26,7 @@ func (f *Food) String() string {
 // NewFood creates a new Food instance with the given energy level.
 func New(amt int) *Food {
 	f := foodPool.Get().(*Food)
-	f.Reset(amt)
+	f.ResetEnergy(amt)
 	return f
 }
 
@@ -36,8 +39,11 @@ func (f *Food) invalidate() {
 	}
 }
 
+// AddEnergy adds amt to the food's energy store.  If this causes
+// the energy level to drop to zero and a locator was provided
+// with UseLocator, it will be used to remove the food.
 func (f *Food) AddEnergy(amt int) (adj int, newLevel int) {
-	adj, newLevel = f.Battery.AddEnergy(amt)
+	adj, newLevel = f.Store.AddEnergy(amt)
 	if adj != 0 && newLevel == 0 {
 		f.invalidate()
 		foodPool.Put(f)
@@ -45,6 +51,9 @@ func (f *Food) AddEnergy(amt int) (adj int, newLevel int) {
 	return adj, newLevel
 }
 
+// UseLocator associates this food instance with a grid2d.Locator,
+// which will be used to remove the food instance when its energy
+// level drops to zero.
 func (f *Food) UseLocator(l grid2d.Locator) {
 	f.loc = l
 }

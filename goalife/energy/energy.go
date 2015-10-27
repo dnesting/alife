@@ -1,3 +1,5 @@
+// Package energy implements a way to track an integer value ("energy")
+// and transfer it around in a concurrency-safe way.
 package energy
 
 import "fmt"
@@ -20,32 +22,34 @@ func (_ nullEnergy) AddEnergy(_ int) (int, int) {
 	return 0, 0
 }
 
+// Null is an energy store that always returns 0 energy and does not
+// accept additional energy.
 var Null = nullEnergy{}
 
-// Battery is a simple implementation of Energetic that just stores a
+// Store is a simple implementation of Energetic that just stores a
 // count of available energy. Its value must never be set below zero.
-type Battery struct {
+type Store struct {
 	V int32
 }
 
-func (e *Battery) String() string {
-	return fmt.Sprintf("[battery %d]", e.V)
+func (e *Store) String() string {
+	return fmt.Sprintf("[store %d]", e.V)
 }
 
 // Energy returns the current amount of energy.
-func (e *Battery) Energy() int {
+func (e *Store) Energy() int {
 	return int(atomic.LoadInt32(&e.V))
 }
 
-func (e *Battery) Reset(amt int) {
+func (e *Store) Reset(amt int) {
 	atomic.StoreInt32(&e.V, int32(amt))
 }
 
-// AddEnergy adds the given amt to the battery. amt may be negative
-// to reduce the amount of energy in the battery. The amount of energy
+// AddEnergy adds the given amt to the store. amt may be negative
+// to reduce the amount of energy in the store. The amount of energy
 // will never drop below zero.  Returns the actual amount of adjustment,
 // and the new energy level.
-func (e *Battery) AddEnergy(amt int) (adj int, newLevel int) {
+func (e *Store) AddEnergy(amt int) (adj int, newLevel int) {
 	for {
 		orig := atomic.LoadInt32(&e.V)
 		v := orig + int32(amt)
