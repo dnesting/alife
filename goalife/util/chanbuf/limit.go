@@ -23,9 +23,11 @@ func Unlimited() Queue {
 	return Limit(-1)
 }
 
-// Null creates a Queue that drops all items added to it.  Get
+// Discard creates a Queue that drops all items added to it.  Get
 // will block without returning any values until Done is called.
-func Null() Queue {
+// If you would like to drop values while unblocking Get when a
+// value arrives, see Trigger.
+func Discard() Queue {
 	return Limit(0)
 }
 
