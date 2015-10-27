@@ -121,11 +121,11 @@ func (n *notifier) add(u []Update) {
 	}
 }
 
-// NotifyToInterface effectively provides a type conversion from a
-// grid2d notification channel (of type []Update) to interface{} for
-// use with queueing and rate-limiting functions in util/chanbuf.
-// This introduces some modest overhead since Go doesn't support this
-// type of type conversion directly.
+// NotifyToInterface provides a type conversion from <-chan []Update to
+// <-chan interface{}.  Go does not provide a facility for this natively,
+// so we resort to running a goroutine to shuttle values concurrently.
+// This is used to provide compatibility between a Grid's notification
+// messages and the queueing and rate-limiting features in util/chanbuf.
 func NotifyToInterface(ch <-chan []Update) <-chan interface{} {
 	chained := make(chan interface{})
 	go func() {
@@ -137,14 +137,11 @@ func NotifyToInterface(ch <-chan []Update) <-chan interface{} {
 	return chained
 }
 
-// NotifyFromInterface effectively provides a type conversion from the
-// aggregated []interface{} type used by the queueing and rate-limiting
-// functions in util/chanbuf, to the grid2d notification channel (of
-// type []Update).  In the process, de-aggregates the aggregated
-// messages, potentially sending multiple messages to the returned
-// channel for every one message received by ch. This introduces some
-// modest overhead since Go doesn't support this type of type conversion
-// directly.
+// NotifyFromInterface provides a type conversion from <-chan []interface{}
+// to <-chan []Update.  Go does not provide a facility for this natively,
+// so we resort to running a goroutine to shuttle values concurrently.
+// This is used to provide compatibility between a Grid's notification
+// messages and the queueing and rate-limiting features in util/chanbuf.
 func NotifyFromInterface(ch <-chan []interface{}) <-chan []Update {
 	chained := make(chan []Update)
 	go func() {
