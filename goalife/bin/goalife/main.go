@@ -149,7 +149,7 @@ func startAndMaintainOrgs(g grid2d.Grid) {
 	g.Subscribe(ch)
 	cpu1.StartAll(g)
 
-	go maintain.Maintain(g, ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
+	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
 }
 
 func startUpdateTracker(g grid2d.Grid, numUpdates *int64) {
