@@ -4,26 +4,24 @@
 // random organisms whenever the number of organisms drops below a
 // certain threshold. A view of the world is rendered to the terminal
 // as it evolves.
-
 package main
 
 import "encoding/gob"
 import "flag"
 import "fmt"
-import "os"
 import "math/rand"
+import "net/http"
+import "os"
 import "runtime"
 import "sync"
 import "sync/atomic"
 import "time"
-import "net/http"
 import _ "net/http/pprof"
 
 import "github.com/dnesting/alife/goalife/census"
 import "github.com/dnesting/alife/goalife/grid2d"
 import "github.com/dnesting/alife/goalife/grid2d/autosave"
 import "github.com/dnesting/alife/goalife/grid2d/food"
-
 import "github.com/dnesting/alife/goalife/grid2d/maintain"
 import "github.com/dnesting/alife/goalife/grid2d/org"
 import "github.com/dnesting/alife/goalife/grid2d/org/cpu1"
@@ -130,23 +128,39 @@ func registerGob() {
 }
 
 func startCensus(g grid2d.Grid) *census.DirCensus {
-	ch := make(chan []grid2d.Update, 0)
+	// Create a new Census that writes to /tmp/census when a population grows to 40.
 	cns, err := census.NewDirCensus("/tmp/census", func(p census.Population) bool { return p.Count > 40 })
 	if err != nil {
 		fmt.Printf("Error creating census: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Use human times.
 	timeNow := func(interface{}) interface{} { return time.Now() }
+
+	ch := make(chan []grid2d.Update, 0)
 	g.Subscribe(ch)
+
+	// Populate the Census with what's already in the world (perhaps restored from an autosave).
+	// Assumes nothing in the world is changing yet.
 	grid2d.ScanForCensus(cns, g, timeNow, orgHash)
+
+	// Start monitoring for changes
 	go grid2d.WatchForCensus(cns, ch, timeNow, orgHash)
+
 	return cns
 }
 
 func startAndMaintainOrgs(g grid2d.Grid) {
-	ch := make(chan []grid2d.Update, 0)
+	// Obtain an initial count before we start anything executing.
 	mCount := maintain.Count(g, isOrg)
+
+	ch := make(chan []grid2d.Update, 0)
 	g.Subscribe(ch)
+
+	// Start all organisms currently existing in the Grid.  We do this *after*
+	// subscribing ch so that we don't end up with a wrong count if any organisms
+	// divide or die.
 	cpu1.StartAll(g)
 
 	go maintain.Maintain(ch, isOrg, func() { startOrg(g) }, minOrgs, mCount)
@@ -173,9 +187,12 @@ func startAutosave(g grid2d.Grid, exit <-chan bool) {
 }
 
 func printLoop(ch <-chan []grid2d.Update, g grid2d.Grid, cns *census.DirCensus, cond *sync.Cond, numUpdates *int64, clearScreen bool) {
+	// Try to keep rendering smooth.
 	runtime.LockOSThread()
+
 	for _ = range ch {
 		if clearScreen {
+			// TODO(dnesting): use termcap/terminfo to do this more portably.
 			fmt.Print("[H")
 		}
 		term.PrintWorld(os.Stdout, g)
@@ -183,11 +200,16 @@ func printLoop(ch <-chan []grid2d.Update, g grid2d.Grid, cns *census.DirCensus, 
 		if clearScreen {
 			fmt.Print("[J")
 		}
+
+		// Write some summary stats after the rendering.
 		fmt.Printf("%d updates\n", atomic.LoadInt64(numUpdates))
 		fmt.Printf("%d/%d orgs (%d/%d species, %d recorded)\n", cns.Count(), cns.CountAllTime(), cns.Distinct(), cns.DistinctAllTime(), cns.NumRecorded())
 		if loc := g.Get(0, 0); loc != nil {
 			fmt.Printf("random: %v\n", loc.Value())
 		}
+
+		// If we're running with --sync, signal to any goroutines waiting on a rendering that
+		// it's OK for them to continue again.
 		if cond != nil {
 			cond.Broadcast()
 		}
@@ -195,9 +217,21 @@ func printLoop(ch <-chan []grid2d.Update, g grid2d.Grid, cns *census.DirCensus, 
 }
 
 func startPrintLoop(g grid2d.Grid, cns *census.DirCensus, cond *sync.Cond, numUpdates *int64, clearScreen bool) {
-	freq := time.Duration(1000000.0/printRate) * time.Microsecond
+	// We want to use chanbuf.Tick to ensure renders occur at specific intervals regardless
+	// of the rate at which updates arrive.  To prevent the notification channel from backing up
+	// and causing deadlock, we buffer using a chanbuf.Trigger (since we don't care about the
+	// update messages themselves).  We could have used a time.Tick instead, but we'd need to
+	// do something special to ensure this loop exits when the notifications stop.
+
+	// grid notifier -> updateCh -> trigger -> tick -> print world
+	//   grid notifier first dispatches an update the moment it occurs
+	//   trigger consumes the event and flags that an update occurred
+	//   tick fires every freq, halting when trigger reports it's closed
+	//   printLoop renders the grid every time tick fires
+
 	updateCh := make(chan []grid2d.Update, 0)
 	trigger := chanbuf.Trigger()
+	freq := time.Duration(1000000.0/printRate) * time.Microsecond
 	go chanbuf.Feed(trigger, grid2d.NotifyToInterface(updateCh))
 	tickCh := chanbuf.Tick(trigger, freq, true)
 	g.Subscribe(updateCh)
@@ -235,25 +269,35 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Force the world to conform to --width and --height.
 	g.Resize(width, height, nil)
 
+	// Record the contents of the grid (which may not be empty if restored from autosave)
+	// and start monitoring it for changes.
 	cns := startCensus(g)
 
-	// Start any organisms that exist in the world (from autosave) and begin tracking
+	// Start any organisms that exist in the world (e.g., from autosave) and begin tracking
 	// the number of organisms and maintaining a minimum number.
 	startAndMaintainOrgs(g)
 
 	if saveFile != "" && saveEvery != 0 {
+		// Begin auto-saving the world periodically.
 		startAutosave(g, exit)
 	}
 
+	// Track the number of updates observed in the world for display during rendering.
 	var numUpdates int64
 	startUpdateTracker(g, &numUpdates)
 
 	if printWorld {
+		// Start rendering the world periodically.
 		startPrintLoop(g, cns, cond, &numUpdates, !isTracing())
 	}
 
+	// Block until exit, which presently is never.
 	<-exit
+
+	// For completeness, stop all of the goroutines waiting on world events.
 	g.CloseSubscribers()
 }
