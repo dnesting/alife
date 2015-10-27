@@ -4,6 +4,7 @@ import "github.com/dnesting/alife/goalife/grid2d/food"
 import "github.com/dnesting/alife/goalife/grid2d/org"
 import "github.com/dnesting/alife/goalife/grid2d/org/cpu1"
 
+// RuneForOccupant produces a rune for the thing occupying a grid2d cell.
 func RuneForOccupant(o interface{}) rune {
 	switch o := o.(type) {
 	case *food.Food:
@@ -15,6 +16,8 @@ func RuneForOccupant(o interface{}) rune {
 	}
 }
 
+// RuneForFood produces a rune for f, scaling the number of dots based on
+// the "upper limit" given by energyRange.
 func RuneForFood(f *food.Food, energyRange int) rune {
 	e := f.Energy()
 	switch {
@@ -33,11 +36,12 @@ func RuneForFood(f *food.Food, energyRange int) rune {
 
 var codeRunes string = "abcdefhijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func RuneForOrganism(f *org.Organism) rune {
-	if f.Driver == nil {
+// RuneForOrganism produces a rune for g based on the bytecode hash of the organism.
+func RuneForOrganism(g *org.Organism) rune {
+	if g.Driver == nil {
 		return '?'
 	}
-	switch o := f.Driver.(type) {
+	switch o := g.Driver.(type) {
 	case *cpu1.Cpu:
 		return rune(codeRunes[o.Code.Hash()%uint64(len(codeRunes))])
 	default:

@@ -1,3 +1,4 @@
+// Package term visualizes a grid2d on a terminal.
 package term
 
 import "io"
@@ -61,6 +62,7 @@ func fillBefore(w io.Writer, x, y int, width int, ix, iy *int) {
 	}
 }
 
+// Ordering is undefined for grid2d.Locations, so sort here just to be sure.
 type byCoordinate []grid2d.Point
 
 func (p byCoordinate) Len() int { return len(p) }
@@ -75,8 +77,11 @@ func (p byCoordinate) Less(i, j int) bool {
 }
 func (p byCoordinate) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
+// Re-use point grids. We don't use a single global reference because we have no idea
+// if our caller will be doing this in a concurrent way.
 var locPool = sync.Pool{New: func() interface{} { return make([]grid2d.Point, 0) }}
 
+// PrintWorld renders g to w.
 func PrintWorld(w io.Writer, g grid2d.Grid) {
 	points := locPool.Get().([]grid2d.Point)
 	width, height, _ := g.Locations(&points)
