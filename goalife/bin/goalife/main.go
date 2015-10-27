@@ -136,10 +136,10 @@ func startCensus(g grid2d.Grid) *census.DirCensus {
 		fmt.Printf("Error creating census: %v\n", err)
 		os.Exit(1)
 	}
-	timeNow := func() interface{} { return time.Now() }
+	timeNow := func(interface{}) interface{} { return time.Now() }
 	g.Subscribe(ch)
 	grid2d.ScanForCensus(cns, g, timeNow, orgHash)
-	go grid2d.WatchForCensus(cns, g, ch, timeNow, orgHash)
+	go grid2d.WatchForCensus(cns, ch, timeNow, orgHash)
 	return cns
 }
 
@@ -228,7 +228,7 @@ func main() {
 	registerGob()
 
 	// Set up the Grid, and restore it from autosave if able.
-	g := grid2d.New(0, 0, exit, cond)
+	g := grid2d.New(0, 0, cond)
 	if saveFile != "" {
 		if err := autosave.Restore(saveFile, g); err != nil && !os.IsNotExist(err) {
 			fmt.Printf("error restoring from %s: %v\n", saveFile, err)
@@ -255,4 +255,5 @@ func main() {
 	}
 
 	<-exit
+	g.CloseSubscribers()
 }

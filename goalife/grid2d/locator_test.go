@@ -20,7 +20,7 @@ import "testing"
 // }
 
 func TestGetPut(t *testing.T) {
-	g := New(3, 3, nil, nil)
+	g := New(3, 3, nil)
 	_, l := g.Put(1, 1, 11, PutAlways)
 
 	l2 := l.Get(1, 1)
@@ -48,7 +48,7 @@ func TestGetPut(t *testing.T) {
 }
 
 func TestGetWrap(t *testing.T) {
-	g := New(2, 2, nil, nil)
+	g := New(2, 2, nil)
 	_, l := g.Put(1, 1, 11, PutAlways)
 	_, lx := l.Put(1, 0, 12, PutAlways)
 	_, ly := l.Put(0, 1, 13, PutAlways)
@@ -63,7 +63,7 @@ func TestGetWrap(t *testing.T) {
 }
 
 func TestMove(t *testing.T) {
-	g := New(3, 3, nil, nil)
+	g := New(3, 3, nil)
 	_, l := g.Put(1, 1, 11, PutAlways)
 	l2 := g.Get(1, 1)
 	if l != l2 {
@@ -96,7 +96,7 @@ func TestMove(t *testing.T) {
 
 // 	Replace(n interface{}) Locator
 func TestReplace(t *testing.T) {
-	g := New(3, 3, nil, nil)
+	g := New(3, 3, nil)
 	_, l := g.Put(1, 1, 11, PutAlways)
 
 	if l.Value() != 11 {

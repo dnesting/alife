@@ -4,9 +4,6 @@ import "reflect"
 import "testing"
 
 func TestNotify(t *testing.T) {
-	doneCh := make(chan bool)
-	defer close(doneCh)
-
 	tAdd := []Update{
 		Update{
 			New: &Point{1, 2, 10},
@@ -33,7 +30,8 @@ func TestNotify(t *testing.T) {
 		},
 	}
 
-	n := newNotifier(doneCh)
+	var n notifier
+	defer n.CloseSubscribers()
 
 	go func() {
 		n.RecordAdd(1, 2, 10)

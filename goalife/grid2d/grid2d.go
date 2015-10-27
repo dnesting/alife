@@ -1,3 +1,5 @@
+// Package grid2d provides a 2D discrete-cell "world" within which
+// occupants may live their lives.
 package grid2d
 
 import "bytes"
@@ -10,31 +12,30 @@ import "github.com/dnesting/alife/goalife/log"
 
 var Logger = log.Null()
 
+// PutWhenFunc is called any time an occupant will be placed in the Grid to
+// establish whether or not the Put should proceed depending on the contents
+// of the cell.
 type PutWhenFunc func(existing, proposed interface{}) bool
 
+// PutAlways signals that a Put should always proceed, regardless of whether
+// the cell is already occupied.
 var PutAlways PutWhenFunc = func(_, _ interface{}) bool {
 	return true
 }
 
+// PutWhenNil signals that a Put should only succeed if the cell value is
+// nil (the cell is empty).
 var PutWhenNil PutWhenFunc = func(a, _ interface{}) bool {
-	Logger.Printf("PutWhenNil(%v) == nil? %v\n", a, a == nil)
 	return a == nil
 }
 
+// Point is a value located at a specific coordinate in the Grid.
 type Point struct {
 	X, Y int
 	V    interface{}
 }
 
-type NotifyStyle int
-
-const (
-	BufferFirst NotifyStyle = 1 << iota
-	BufferLast
-	BufferAll
-	Unbuffered
-)
-
+// Grid is a 2D world that holds occupants at specific discrete coordinates.
 type Grid interface {
 	Extents() (int, int)
 	Get(x, y int) Locator
@@ -48,23 +49,29 @@ type Grid interface {
 
 	Subscribe(ch chan<- []Update)
 	Unsubscribe(ch chan<- []Update)
+	CloseSubscribers()
 }
 
 type grid struct {
 	sync.RWMutex
 	cond *sync.Cond
-	*notifier
+	notifier
+
 	width, height int
 	data          []*locator
 }
 
-func New(width, height int, done <-chan bool, cond *sync.Cond) Grid {
+// New creates a Grid with the given extents.
+//
+// If cond is provided, every world-mutating operation will call
+// cond.Wait to ensure events are synchronized.  This is useful to
+// synchronize updates with rendering.
+func New(width, height int, cond *sync.Cond) Grid {
 	return &grid{
-		cond:     cond,
-		notifier: newNotifier(done),
-		width:    width,
-		height:   height,
-		data:     make([]*locator, width*height),
+		cond:   cond,
+		width:  width,
+		height: height,
+		data:   make([]*locator, width*height),
 	}
 }
 
@@ -72,19 +79,23 @@ func (g *grid) String() string {
 	return fmt.Sprintf("[grid %d,%d]", g.width, g.height)
 }
 
-func (g *grid) Extents() (int, int) {
+// Extents returns the size of the world.
+func (g *grid) Extents() (width int, height int) {
 	g.RLock()
 	defer g.RUnlock()
 	return g.width, g.height
 }
 
-func (g *grid) offset(w, h int) int {
-	if w < 0 || w > g.width || h < 0 || h > g.height {
-		panic(fmt.Sprintf("grid index out of bounds: (%d,%d) is outside %dx%d", w, h, g.width, g.height))
+// offset converts x,y coordinates to the g.data offset for that cell.
+func (g *grid) offset(x, y int) int {
+	if x < 0 || x > g.width || y < 0 || y > g.height {
+		panic(fmt.Sprintf("grid index out of bounds: (%d,%d) is outside %dx%d", x, y, g.width, g.height))
 	}
-	return h*g.width + w
+	return y*g.width + x
 }
 
+// Get retrieves the Locator for any occupant at x,y.  If the cell is
+// empty, returns nil.
 func (g *grid) Get(x, y int) Locator {
 	g.RLock()
 	defer g.RUnlock()
@@ -98,11 +109,14 @@ func (g *grid) getLocked(x, y int) *locator {
 	return g.data[g.offset(x, y)]
 }
 
+// Remove removes any occupant at x,y, and returns it.
 func (g *grid) Remove(x, y int) interface{} {
 	o, _ := g.Put(x, y, nil, PutAlways)
 	return o
 }
 
+// Wait invokes Wait on the sync.Cond object provided during initialization.
+// This method is a no-op if no Cond was provided.
 func (g *grid) Wait() {
 	if g.cond != nil {
 		g.cond.L.Lock()
@@ -111,22 +125,31 @@ func (g *grid) Wait() {
 	}
 }
 
+// Put places n at x,y when fn returns true.  Returns the existing occupant,
+// and a Locator instance that can be used to relate n to the grid in the future.
 func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	g.Lock()
 	defer g.Unlock()
 	return g.putLockedWithNotify(x, y, n, fn)
 }
 
+// PutRandomly places n at a random location in the grid.  Returns any occupant
+// that was replaced, and a Locator instance that can be used to relate n to the grid
+// in the future.  If no open cells are available, returns nil, nil.
 func (g *grid) PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	g.Lock()
 	defer g.Unlock()
 	var retry int
 	for {
+		// Start by assuming a few random guesses will eventually find an open cell.
 		orig, loc := g.putLockedWithNotify(rand.Intn(g.width), rand.Intn(g.height), n, fn)
 		if loc != nil {
 			return orig, loc
 		}
 		retry += 1
+
+		// At some point we should give up and verify that there are some open spots
+		// before continuing to try some more.
 		if retry%10 == 0 {
 			_, _, count := g.locationsLocked(nil)
 			if count >= g.width*g.height {
@@ -190,6 +213,7 @@ func (g *grid) moveLocked(x1, y1, x2, y2 int, fn PutWhenFunc) (interface{}, bool
 	return dst.Value(), true
 }
 
+// All returns the Locators for all occupants in the grid.
 func (g *grid) All() []Locator {
 	g.RLock()
 	defer g.RUnlock()
@@ -202,14 +226,16 @@ func (g *grid) All() []Locator {
 	return locs
 }
 
-func (g *grid) Locations(points *[]Point) (int, int, int) {
+// Locations populates points with all occupants in the grid.  Returns the width
+// and height of the Grid at the time along with a count of the number of occupants
+// found.  Points may be nil if you just want to get a quick count.
+func (g *grid) Locations(points *[]Point) (width int, height int, count int) {
 	g.RLock()
 	defer g.RUnlock()
 	return g.locationsLocked(points)
 }
 
-func (g *grid) locationsLocked(points *[]Point) (int, int, int) {
-	var count int
+func (g *grid) locationsLocked(points *[]Point) (width int, height int, count int) {
 	if points != nil {
 		if cap(*points) < g.width*g.height {
 			*points = make([]Point, 0, g.width*g.height)
@@ -227,6 +253,9 @@ func (g *grid) locationsLocked(points *[]Point) (int, int, int) {
 	return g.width, g.height, count
 }
 
+// Resize changes the dimensions of the Grid.  Any occupants that find themselves
+// outside of the resized Grid are passed individually to removedFn before being
+// discarded.
 func (g *grid) Resize(width, height int, removedFn func(x, y int, o interface{})) {
 	Logger.Printf("%g.Resize(%d,%d)\n", width, height)
 	g.Lock()
