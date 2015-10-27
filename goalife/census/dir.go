@@ -24,7 +24,6 @@ var deps = struct {
 }
 
 // DirCensus implements a Census that saves interesting populations to disk.
-// This type wraps a MemCensus and behaves similarly.
 type DirCensus struct {
 	Dir       string                  // the parent directory holding populations
 	Threshold func(p Population) bool // the deciding func for whether an Add should be persistent
@@ -32,6 +31,8 @@ type DirCensus struct {
 	numRecorded int // the number of populations written to disk
 }
 
+// NewDirCensus creates a DirCensus storing populations that satisfy
+// threshold in dir.
 func NewDirCensus(dir string, threshold func(p Population) bool) (*DirCensus, error) {
 	b := &DirCensus{
 		Dir:       dir,
@@ -49,16 +50,18 @@ func (b *DirCensus) filename(key Key) string {
 	return path.Join(b.Dir, fmt.Sprintf("%x", key.Hash()))
 }
 
+// GetFromRecord retrieves the population with key from disk.
 func (b *DirCensus) GetFromRecord(key Key) (Population, error) {
 	return b.decodeFromFilename(b.filename(key))
 }
 
+// IsRecorded returns true if a population with key exists on disk.
 func (b *DirCensus) IsRecorded(key Key) bool {
 	_, err := deps.Stat(b.filename(key))
 	return err == nil
 }
 
-// Record writes the given cohort to disk.
+// Record writes population to disk.
 func (b *DirCensus) Record(c Population) error {
 	f, err := deps.Create(b.filename(c.Key))
 	if err != nil {
@@ -103,8 +106,9 @@ func (b *DirCensus) decodeFromFilename(name string) (Population, error) {
 	return p, nil
 }
 
-// Add indicates an instance of the given population was added to the world,
-// possibly writing the Population to disk if it exceeds the DirCensus's threshold.
+// Add indicates an instance of population was added, possibly
+// writing the Population to disk if it satisfies the DirCensus's
+// threshold.
 func (b *DirCensus) Add(when interface{}, key Key) Population {
 	c := b.MemCensus.Add(when, key)
 
@@ -115,9 +119,9 @@ func (b *DirCensus) Add(when interface{}, key Key) Population {
 	return c
 }
 
-// Add indicates an instance of the given population was removed from the world,
-// possibly writing the Population to disk to record its last-seen information if
-// it was previously written there.
+// Remove indicates an instance of population was removed, possibly
+// writing the Population to disk to record its last-seen information
+// if it was previously written there.
 func (b *DirCensus) Remove(when interface{}, key Key) Population {
 	c := b.MemCensus.Remove(when, key)
 
@@ -127,6 +131,7 @@ func (b *DirCensus) Remove(when interface{}, key Key) Population {
 	return c
 }
 
+// NumRecorded returns the number of populations currently seen in dir.
 func (b *DirCensus) NumRecorded() int {
 	return b.numRecorded
 }

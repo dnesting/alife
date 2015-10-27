@@ -3,7 +3,8 @@ package census
 import "fmt"
 import "sync"
 
-// MemCensus implements a Census entirely in-memory.
+// MemCensus implements a Census entirely in-memory, tracking a population while
+// its count is greater than 0.
 type MemCensus struct {
 	mu          sync.RWMutex
 	seen        map[uint64]*Population
@@ -13,7 +14,9 @@ type MemCensus struct {
 	distinctAll int
 }
 
-func (b *MemCensus) Get(key Key) (Population, bool) {
+// Get retrieves the population having key. If no population currently exists
+// with that key, returns a zero-valued Population and ok will be false.
+func (b *MemCensus) Get(key Key) (p Population, ok bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	c, ok := b.seen[key.Hash()]
@@ -49,6 +52,7 @@ func (b *MemCensus) Add(when interface{}, key Key) (ret Population) {
 }
 
 // Remove indicates an instance of the given key was removed from the world.
+// If this is the last instance of a key, the population will be forgotten.
 func (b *MemCensus) Remove(when interface{}, key Key) (ret Population) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -68,28 +72,28 @@ func (b *MemCensus) Remove(when interface{}, key Key) (ret Population) {
 	panic(fmt.Sprintf("mismatched remove for %v", key))
 }
 
-// Count returns the number of things presently tracked in the world.
+// Count returns the number of things presently tracked.
 func (b *MemCensus) Count() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.count
 }
 
-// CountAllTime returns the number of things ever added to the world.
+// CountAllTime returns the number of things ever added.
 func (b *MemCensus) CountAllTime() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.countAll
 }
 
-// Distinct returns the number of distinct keys currently represented in the world.
+// Distinct returns the number of distinct keys currently tracked.
 func (b *MemCensus) Distinct() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.distinct
 }
 
-// DistinctAllTime returns the number of distinct keys ever seen in the world.
+// DistinctAllTime returns the number of distinct keys ever added.
 func (b *MemCensus) DistinctAllTime() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

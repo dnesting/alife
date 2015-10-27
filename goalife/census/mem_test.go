@@ -1,5 +1,6 @@
 package census
 
+import "fmt"
 import "testing"
 
 type fakeKeyType struct {
@@ -120,6 +121,24 @@ func TestMultiple(t *testing.T) {
 
 	p, _ := c.Get(fakeKey(20))
 	if p.Count != 2 {
-		t.Errorf("Population count should be 2, got %d", c.Count)
+		t.Errorf("Population count should be 2, got %d", p.Count)
 	}
+}
+
+type IntKey int
+
+func (k IntKey) Hash() uint64 {
+	return uint64(k)
+}
+
+func ExampleMemCensus() {
+	var c MemCensus
+	c.Add(1, IntKey(10))
+	c.Add(2, IntKey(10))
+	c.Add(3, IntKey(20))
+	c.Add(4, IntKey(30))
+	c.Remove(5, IntKey(20))
+
+	fmt.Printf("%d added, %d still there, %d distinct\n", c.CountAllTime(), c.Count(), c.Distinct())
+	// Output: 4 added, 3 still there, 2 distinct
 }
