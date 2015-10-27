@@ -19,7 +19,7 @@ const SenseDistance = 10
 var Logger = log.Null()
 
 type Organism struct {
-	energy.Battery
+	energy.Store
 	loc    grid2d.Locator
 	Driver interface{}
 

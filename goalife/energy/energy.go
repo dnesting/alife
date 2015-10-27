@@ -41,7 +41,7 @@ func (e *Store) Energy() int {
 	return int(atomic.LoadInt32(&e.V))
 }
 
-func (e *Store) Reset(amt int) {
+func (e *Store) ResetEnergy(amt int) {
 	atomic.StoreInt32(&e.V, int32(amt))
 }
 
