@@ -139,24 +139,16 @@ func (g *grid) Put(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locato
 func (g *grid) PutRandomly(n interface{}, fn PutWhenFunc) (interface{}, Locator) {
 	g.Lock()
 	defer g.Unlock()
-	var retry int
-	for {
-		// Start by assuming a few random guesses will eventually find an open cell.
-		orig, loc := g.putLockedWithNotify(rand.Intn(g.width), rand.Intn(g.height), n, fn)
+
+	offsets := rand.Perm(len(g.data))
+	for _, offset := range offsets {
+		x, y := offset%g.width, offset/g.width
+		orig, loc := g.putLockedWithNotify(x, y, n, fn)
 		if loc != nil {
 			return orig, loc
 		}
-		retry += 1
-
-		// At some point we should give up and verify that there are some open spots
-		// before continuing to try some more.
-		if retry%10 == 0 {
-			_, _, count := g.locationsLocked(nil)
-			if count >= g.width*g.height {
-				return nil, nil
-			}
-		}
 	}
+	return nil, nil
 }
 
 func (g *grid) putLockedWithNotify(x, y int, n interface{}, fn PutWhenFunc) (interface{}, Locator) {
